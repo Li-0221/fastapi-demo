@@ -1,0 +1,1 @@
+"""Typed inbound contract conversion."""

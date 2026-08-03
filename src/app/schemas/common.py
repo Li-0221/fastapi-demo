@@ -1,0 +1,57 @@
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
+
+
+class CamelModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        serialize_by_alias=True,
+        validate_by_alias=True,
+        validate_by_name=True,
+    )
+
+
+class RqModel(CamelModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        extra="forbid",
+        serialize_by_alias=True,
+        validate_by_alias=True,
+        validate_by_name=True,
+    )
+
+
+class RsModel(CamelModel):
+    pass
+
+
+class ApiResponse[DataT](RsModel):
+    data: DataT
+
+
+class PageData[DataT](RsModel):
+    items: list[DataT]
+    total: int
+    page: int
+    page_size: int
+
+
+class MessageData(RsModel):
+    message: str
+
+
+class ValidationIssue(RsModel):
+    location: list[str]
+    message: str
+    error_type: str
+
+
+class ErrorData(RsModel):
+    code: str
+    message: str
+    request_id: str
+    details: tuple[ValidationIssue, ...]
+
+
+class ErrorResponse(RsModel):
+    error: ErrorData
