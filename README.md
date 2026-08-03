@@ -20,21 +20,42 @@
 
 ```text
 fastapi-demo/
-├── alembic/                  # 数据库 schema 的版本历史
+├── alembic/                       # 数据库 schema 的迁移环境与版本历史
+│   ├── versions/                  # Alembic revision 文件
+│   └── env.py                     # Alembic 运行环境和 metadata 装配
 ├── src/app/
-│   ├── api/routes/           # HTTP 参数、依赖注入、响应组装
-│   ├── core/                 # 配置和密码/JWT 基础能力
-│   ├── db/                   # Session manager 和 ORM metadata
-│   ├── dependencies/         # Manager、Service、当前用户的装配
-│   ├── mappers/              # Request 到内部 Command 的显式转换
-│   ├── models/               # SQLAlchemy ORM 模型
-│   ├── presenters/           # 内部 Result 到公开 Data 的 allowlist 映射
-│   ├── repositories/         # 查询、排序、约束错误和持久化
-│   ├── schemas/              # Request、Data 和 HTTP response 契约
-│   ├── services/             # Command/Result、Session、事务和业务规则
-│   ├── exception_handlers.py # 业务错误到 HTTP 错误契约的唯一映射
-│   └── main.py               # FastAPI 应用工厂
-└── tests/api/                # 从真实 ASGI 边界验证公开契约
+│   ├── api/
+│   │   ├── routes/                # HTTP 参数、依赖注入、响应组装
+│   │   ├── openapi.py             # OpenAPI 错误响应 schema 装配
+│   │   └── router.py              # API 子路由汇总
+│   ├── core/                      # 配置和密码/JWT 基础能力
+│   ├── db/                        # Session manager 和 ORM metadata
+│   ├── dependencies/              # Manager、Service、当前用户的依赖装配
+│   ├── mappers/                   # Request 到内部 Command/Result 的显式转换
+│   ├── models/                    # SQLAlchemy ORM 模型
+│   ├── presenters/                # 内部 Result 到公开 Data 的 allowlist 映射
+│   ├── repositories/              # 查询、排序、约束错误和持久化
+│   ├── schemas/                   # Request、Data 和 HTTP response 契约
+│   ├── scripts/                   # 创建超级管理员等运维脚本
+│   ├── services/                  # Command/Result、Session、事务和业务规则
+│   ├── exception_handlers.py      # 业务错误到 HTTP 错误契约的唯一映射
+│   ├── exceptions.py              # 稳定业务异常与错误码
+│   ├── main.py                    # FastAPI 应用工厂
+│   └── middleware.py              # Request ID 等 HTTP 中间件
+├── tests/
+│   ├── api/                       # 从真实 ASGI 边界验证公开 API 契约
+│   ├── integration/               # PostgreSQL Session 与 migration 集成测试
+│   ├── unit/                      # 配置等快速单元测试
+│   ├── conftest.py                # pytest fixture 和测试数据库生命周期
+│   └── support.py                 # 测试数据工厂
+├── .env.example                   # 本地环境变量安全示例
+├── .pre-commit-config.yaml        # 提交前检查配置
+├── AGENTS.md                      # 本仓库工程约束
+├── Dockerfile                     # API 容器镜像定义
+├── alembic.ini                    # Alembic 配置
+├── compose.yaml                   # 本地 PostgreSQL 编排
+├── pyproject.toml                 # Python 依赖与工具配置
+└── uv.lock                        # 锁定后的依赖版本
 ```
 
 一次登录请求的调用方向是：
