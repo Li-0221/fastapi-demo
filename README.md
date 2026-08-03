@@ -9,8 +9,8 @@
 模板已包含：
 
 - 用户公开注册、OAuth2 密码登录和 JWT Bearer 认证
-- 当前用户读取和部分更新
-- 管理员用户创建、分页列表、详情、部分更新和删除
+- 当前用户读取和完整资料更新
+- 管理员用户创建、分页列表、详情、完整更新和删除
 - Argon2 密码哈希，公开响应永不包含密码哈希
 - SQLAlchemy 2、Alembic 与 Docker PostgreSQL
 - 统一成功 envelope、稳定错误码、请求 ID 和安全的未知错误响应
@@ -31,7 +31,6 @@ fastapi-demo/
 │   ├── core/                      # 配置和密码/JWT 基础能力
 │   ├── db/                        # Session manager 和 ORM metadata
 │   ├── dependencies/              # Manager、Service、当前用户的依赖装配
-│   ├── mappers/                   # Request 到内部 Command/Result 的显式转换
 │   ├── models/                    # SQLAlchemy ORM 模型
 │   ├── presenters/                # 内部 Result 到公开 Data 的 allowlist 映射
 │   ├── repositories/              # 查询、排序、约束错误和持久化
@@ -151,15 +150,16 @@ Swagger 和通用 OAuth2 客户端无法识别。
 | `POST` | `/api/v1/auth/register` | 公开 | 注册普通用户 |
 | `POST` | `/api/v1/auth/login/access-token` | 公开 | 登录并签发 access token |
 | `GET` | `/api/v1/users/me` | 登录 | 查看自己 |
-| `PATCH` | `/api/v1/users/me` | 登录 | 修改自己的邮箱、姓名或密码 |
+| `PUT` | `/api/v1/users/me` | 登录 | 完整更新自己的可编辑资料，可选修改密码 |
 | `POST` | `/api/v1/users` | 管理员 | 创建用户 |
 | `GET` | `/api/v1/users` | 管理员 | 稳定排序的分页列表 |
 | `GET` | `/api/v1/users/{userId}` | 管理员 | 用户详情 |
-| `PATCH` | `/api/v1/users/{userId}` | 管理员 | 部分更新用户 |
+| `PUT` | `/api/v1/users/{userId}` | 管理员 | 完整更新用户的可管理字段，可选修改密码 |
 | `DELETE` | `/api/v1/users/{userId}` | 管理员 | 删除用户 |
 
-PATCH 严格区分三种状态：字段未提供表示保持原值；`fullName: null` 表示清空；不可为空的
-字段（例如 `email`、`isActive`）收到 `null` 会在 request schema 边界返回 `422`。
+PUT 要求完整提供当前资源可编辑的字段；`fullName: null` 表示清空姓名，不可为空的字段
+（例如 `email`、`isActive`）缺失或收到 `null` 会在 request schema 边界返回 `422`。
+密码无法从详情接口回读，因此是可选的 write-only 字段；省略或传 `null` 表示保持现有密码。
 
 生产部署必须在网关或反向代理为公开的注册、登录端点设置请求体上限和按来源限流。
 限流通常需要共享存储与可信客户端地址，不属于这个单进程教学模板的应用内能力。

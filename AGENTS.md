@@ -97,11 +97,12 @@ uv run alembic check
 - `flush()` 只用于在当前事务内取得数据库生成值、触发约束或让后续 SQL 看见写入；它不等于持久提交。
 - Repository 返回 ORM、typed read model、`list[T]` 或 `(items, total)`，不得让 SQLAlchemy `Row`、裸 tuple 或裸 dict 泄漏到业务层。
 
-### Mapper 与 Presenter
+### Contract 转换与 Presenter
 
-- Mapper 将 request schema 显式转换为内部 Command，保留 PATCH 的字段提供状态。
+- Request 到 Command、ORM 到 Result 的转换通过目标 contract 的 named constructor 完成，保留 PUT 的完整字段语义。
+- 不为单一字段复制链路新增独立 `mappers/` 目录或无状态 Mapper class；只有存在多个真实来源或 adapter 时才建立独立转换模块。
 - Presenter 通过 allowlist 把 ORM/Result 转换为公开 Data schema。
-- 两者只能转换字段，禁止访问数据库、判断权限、改变状态或提交事务。
+- Contract 转换与 Presenter 只能转换字段，禁止访问数据库、判断权限、改变状态或提交事务。
 - 禁止整体 dump ORM 或宽内部模型作为公开响应，尤其不能暴露 `hashed_password`。
 
 ## API 契约
@@ -124,7 +125,9 @@ uv run alembic check
 ## PUT、PATCH 与写入模型
 
 - 新增 PUT 默认表示完整资源替换，使用语义明确的 `FooPut` request；完整资源字段必须提供，可清空字段也必须显式传 `null`。
-- 现有用户接口使用 PATCH 表达部分更新，不得为了形式统一把 PATCH 改成 PUT，也不得把 partial update 伪装成完整替换。
+- 现有用户更新接口使用 PUT 表达完整替换；请求必须提供对应资源全部可编辑字段，允许清空的字段也必须显式传 `null`。
+- 本仓库的用户 update 必须保持为 PUT，不得改回 PATCH 后将 request `model_dump()` 为带字符串 key 的 dict 再更新 ORM。PUT 本身不会自动消除字符串 key；真正的不变量是 `FooPut` request、typed Command、typed `UserRecordReplacement` 和 Repository 显式 ORM 属性赋值组成的完整 typed 链路。
+- 密码等无法从详情响应回读的 write-only 字段可以在 PUT 中保持可选；省略或 `null` 表示不轮换该凭据，不影响其他字段的完整替换语义。
 - ORM 更新优先显式字段赋值，使类型检查能够发现字段拼写和归属错误；禁止 request dump 后通过字符串 key 动态 `setattr`。
 - 不新增全局通用 `UpdateSchema`。确需复用更新 payload 时，由目标 Repository 拥有窄 typed schema，并明确 omitted/null/value 语义。
 - 密码等需要转换的字段先在 Service 生成业务事实，再以 typed persistence payload 传给 Repository，不能把原始 request 直接下传。
@@ -188,7 +191,7 @@ uv run alembic check
 - 权限测试同时覆盖允许与越权；分页覆盖稳定顺序、空结果和边界参数。
 - 修复 bug 必须增加一个修复前会失败的最小回归测试。
 - 测试独立于执行顺序，不依赖其他测试遗留的数据；测试凭据使用运行时随机值，不写死真实凭据。
-- Schema/validator/serializer、Mapper/Presenter 和纯业务规则使用快速单元测试，覆盖边界值、alias、omitted/null/value 与失败路径。
+- Schema/validator/serializer、contract factory、Presenter 和纯业务规则使用快速单元测试，覆盖边界值、alias、omitted/null/value 与失败路径。
 - 不为通过测试删除断言、放宽公开 contract 或吞掉错误；测试替身只实现调用方真实依赖的 contract。
 
 ## 文件与凭据卫生
@@ -200,11 +203,11 @@ uv run alembic check
 
 ## 完成检查
 
-- [ ] Router、Service、Repository、Mapper/Presenter 职责未串层。
+- [ ] Router、Service、Repository、contract factory 与 Presenter 职责未串层。
 - [ ] 业务规则由 schema/Service 拥有，数据库只承担所有 writer 必须遵守的不变量。
 - [ ] Settings/env 有真实消费者，新增或删除时同步更新配置、测试和文档。
 - [ ] Session 和 transaction owner 唯一，没有隐藏 commit 或长事务。
-- [ ] PUT 完整替换及 PATCH omitted/null/value 语义明确，ORM 更新没有字符串 key mass assignment。
+- [ ] PUT 完整替换及 write-only 字段语义明确，ORM 更新没有字符串 key mass assignment。
 - [ ] 分页排序、公开字段、camelCase/OAuth2 例外有 contract test。
 - [ ] 没有无运行价值的 Field/route/OpenAPI description metadata。
 - [ ] 认证身份来自可信 token，越权和失效路径已测试。

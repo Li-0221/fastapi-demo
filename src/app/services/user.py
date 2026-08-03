@@ -8,18 +8,17 @@ from app.exceptions import (
     SelfAdministrationError,
     UserNotFoundError,
 )
-from app.mappers.user_result import UserResultMapper
 from app.repositories.user import (
     DuplicateUserRecordError,
     UserRecordCreate,
-    UserRecordUpdate,
+    UserRecordReplacement,
     UserRepository,
 )
 from app.services.user_contracts import (
     CreateUserCommand,
     RegisterUserCommand,
+    UpdateCurrentUserCommand,
     UpdateUserCommand,
-    UserManagementScope,
     UserPageResult,
     UserResult,
 )
@@ -56,7 +55,7 @@ class UserService:
             except DuplicateUserRecordError:
                 session.rollback()
                 raise EmailAlreadyExistsError from None
-            return UserResultMapper.from_model(user)
+            return UserResult.from_model(user)
 
     # 管理用例由 Service 再次校验 actor, 不能只依赖 Router 是否隐藏或暴露入口。
     def create_user_as_admin(
@@ -76,7 +75,7 @@ class UserService:
             user = UserRepository(session).get_by_id(user_id)
             if user is None:
                 raise UserNotFoundError
-            return UserResultMapper.from_model(user)
+            return UserResult.from_model(user)
 
     def list_users(
         self,
@@ -93,47 +92,58 @@ class UserService:
                 limit=page_size,
             )
             return UserPageResult(
-                items=[UserResultMapper.from_model(user) for user in items],
+                items=[UserResult.from_model(user) for user in items],
                 total=total,
                 page=page,
                 page_size=page_size,
             )
 
-    def update_user(
+    def update_current_user(
+        self,
+        *,
+        actor: UserResult,
+        command: UpdateCurrentUserCommand,
+    ) -> UserResult:
+        hashed_password = hash_password(command.password) if command.password is not None else None
+        with self.manager.session_scope() as session:
+            repository = UserRepository(session)
+            user = repository.get_by_id(actor.id)
+            if user is None:
+                raise UserNotFoundError
+            record = UserRecordReplacement(
+                email=command.email.strip().casefold(),
+                full_name=command.full_name,
+                hashed_password=hashed_password,
+                is_active=user.is_active,
+                is_superuser=user.is_superuser,
+            )
+            try:
+                repository.replace(user=user, data=record)
+                session.commit()
+            except DuplicateUserRecordError:
+                session.rollback()
+                raise EmailAlreadyExistsError from None
+            return UserResult.from_model(user)
+
+    def update_user_as_admin(
         self,
         *,
         actor: UserResult,
         user_id: UUID,
         command: UpdateUserCommand,
-        scope: UserManagementScope,
     ) -> UserResult:
-        # CURRENT_USER 必须操作自己且不能改权限字段; ADMIN 必须是管理员且不能走管理端点改自己。
-        if scope is UserManagementScope.CURRENT_USER:
-            if actor.id != user_id:
-                raise PermissionDeniedError
-            if command.is_active_supplied or command.is_superuser_supplied:
-                raise PermissionDeniedError
-        else:
-            if not actor.is_superuser:
-                raise PermissionDeniedError
-            if actor.id == user_id:
-                raise SelfAdministrationError
+        if not actor.is_superuser:
+            raise PermissionDeniedError
+        if actor.id == user_id:
+            raise SelfAdministrationError
 
-        hashed_password = None
-        # 密码哈希在打开 Session 前完成, 避免昂贵计算占用数据库连接或事务。
-        if command.password_supplied and command.password is not None:
-            hashed_password = hash_password(command.password)
-        record = UserRecordUpdate(
-            email=command.email.strip().casefold() if command.email is not None else None,
-            email_supplied=command.email_supplied,
+        hashed_password = hash_password(command.password) if command.password is not None else None
+        record = UserRecordReplacement(
+            email=command.email.strip().casefold(),
             full_name=command.full_name,
-            full_name_supplied=command.full_name_supplied,
             hashed_password=hashed_password,
-            password_supplied=command.password_supplied,
             is_active=command.is_active,
-            is_active_supplied=command.is_active_supplied,
             is_superuser=command.is_superuser,
-            is_superuser_supplied=command.is_superuser_supplied,
         )
         with self.manager.session_scope() as session:
             repository = UserRepository(session)
@@ -141,12 +151,12 @@ class UserService:
             if user is None:
                 raise UserNotFoundError
             try:
-                repository.update(user=user, data=record)
+                repository.replace(user=user, data=record)
                 session.commit()
             except DuplicateUserRecordError:
                 session.rollback()
                 raise EmailAlreadyExistsError from None
-            return UserResultMapper.from_model(user)
+            return UserResult.from_model(user)
 
     def delete_user(
         self,

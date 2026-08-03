@@ -22,10 +22,6 @@ class DuplicateUserRecordError(Exception):
     """Raised when the database rejects a duplicate user email."""
 
 
-class InvalidUserRecordUpdateError(Exception):
-    """Raised when an internal update contract violates its supplied-value invariant."""
-
-
 @dataclass(frozen=True, slots=True)
 class UserRecordCreate:
     email: str
@@ -37,18 +33,12 @@ class UserRecordCreate:
 
 
 @dataclass(frozen=True, slots=True)
-class UserRecordUpdate:
-    email: str | None
-    email_supplied: bool
+class UserRecordReplacement:
+    email: str
     full_name: str | None
-    full_name_supplied: bool
-    # None 只有在 password_supplied=False 时表示“不更新密码”, 两者必须成对解释。
     hashed_password: str | None = field(repr=False)
-    password_supplied: bool
-    is_active: bool | None
-    is_active_supplied: bool
-    is_superuser: bool | None
-    is_superuser_supplied: bool
+    is_active: bool
+    is_superuser: bool
 
 
 class UserRepository:
@@ -86,25 +76,13 @@ class UserRepository:
             raise
         return user
 
-    def update(self, *, user: User, data: UserRecordUpdate) -> User:
-        if data.email_supplied:
-            if data.email is None:
-                raise InvalidUserRecordUpdateError
-            user.email = data.email
-        if data.full_name_supplied:
-            user.full_name = data.full_name
-        if data.password_supplied:
-            if data.hashed_password is None:
-                raise InvalidUserRecordUpdateError
+    def replace(self, *, user: User, data: UserRecordReplacement) -> User:
+        user.email = data.email
+        user.full_name = data.full_name
+        if data.hashed_password is not None:
             user.hashed_password = data.hashed_password
-        if data.is_active_supplied:
-            if data.is_active is None:
-                raise InvalidUserRecordUpdateError
-            user.is_active = data.is_active
-        if data.is_superuser_supplied:
-            if data.is_superuser is None:
-                raise InvalidUserRecordUpdateError
-            user.is_superuser = data.is_superuser
+        user.is_active = data.is_active
+        user.is_superuser = data.is_superuser
 
         try:
             self.session.flush()

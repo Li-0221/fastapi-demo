@@ -19,7 +19,7 @@ def test_regular_user_cannot_list_users(
     assert response.json()["error"]["code"] == "PERMISSION_DENIED"
 
 
-@pytest.mark.parametrize("method", ["post", "get", "patch", "delete"])
+@pytest.mark.parametrize("method", ["post", "get", "put", "delete"])
 def test_regular_user_cannot_use_admin_user_routes(
     client: TestClient,
     user_account: AccountFixture,
@@ -39,8 +39,17 @@ def test_regular_user_cannot_use_admin_user_routes(
         )
     elif method == "get":
         response = client.get(user_path, headers=headers)
-    elif method == "patch":
-        response = client.patch(user_path, headers=headers, json={"fullName": "Denied"})
+    elif method == "put":
+        response = client.put(
+            user_path,
+            headers=headers,
+            json={
+                "email": admin_account.user.email,
+                "fullName": "Denied",
+                "isActive": admin_account.user.is_active,
+                "isSuperuser": admin_account.user.is_superuser,
+            },
+        )
     else:
         response = client.delete(user_path, headers=headers)
 
@@ -78,38 +87,46 @@ def test_admin_user_crud_and_pagination(
     assert get_response.status_code == 200
     assert get_response.json()["data"]["fullName"] == "Managed User"
 
-    patch_response = client.patch(
+    put_response = client.put(
         f"/api/v1/users/{user_id}",
         headers=headers,
-        json={"fullName": None, "isActive": False},
+        json={
+            "email": "managed@example.com",
+            "fullName": None,
+            "isActive": False,
+            "isSuperuser": False,
+        },
     )
-    assert patch_response.status_code == 200
-    assert patch_response.json()["data"]["fullName"] is None
-    assert patch_response.json()["data"]["isActive"] is False
+    assert put_response.status_code == 200
+    assert put_response.json()["data"]["fullName"] is None
+    assert put_response.json()["data"]["isActive"] is False
 
-    unchanged_response = client.patch(
+    incomplete_response = client.put(
         f"/api/v1/users/{user_id}",
         headers=headers,
         json={},
     )
-    assert unchanged_response.status_code == 200
-    assert unchanged_response.json()["data"]["email"] == "managed@example.com"
-    assert unchanged_response.json()["data"]["fullName"] is None
+    assert incomplete_response.status_code == 422
 
     delete_response = client.delete(f"/api/v1/users/{user_id}", headers=headers)
     assert delete_response.status_code == 204
     assert client.get(f"/api/v1/users/{user_id}", headers=headers).status_code == 404
 
 
-def test_patch_rejects_null_for_non_nullable_field(
+def test_put_rejects_null_for_non_nullable_field(
     client: TestClient,
     admin_account: AccountFixture,
     user_account: AccountFixture,
 ) -> None:
-    response = client.patch(
+    response = client.put(
         f"/api/v1/users/{user_account.user.id}",
         headers=login_headers(client, admin_account),
-        json={"email": None},
+        json={
+            "email": None,
+            "fullName": user_account.user.full_name,
+            "isActive": user_account.user.is_active,
+            "isSuperuser": user_account.user.is_superuser,
+        },
     )
 
     assert response.status_code == 422
@@ -121,10 +138,14 @@ def test_self_update_rejects_admin_fields(
     client: TestClient,
     user_account: AccountFixture,
 ) -> None:
-    response = client.patch(
+    response = client.put(
         "/api/v1/users/me",
         headers=login_headers(client, user_account),
-        json={"isSuperuser": True},
+        json={
+            "email": user_account.user.email,
+            "fullName": user_account.user.full_name,
+            "isSuperuser": True,
+        },
     )
 
     assert response.status_code == 422
@@ -136,17 +157,22 @@ def test_admin_route_refuses_self_management(
 ) -> None:
     headers = login_headers(client, admin_account)
 
-    patch_response = client.patch(
+    put_response = client.put(
         f"/api/v1/users/{admin_account.user.id}",
         headers=headers,
-        json={"fullName": "Changed"},
+        json={
+            "email": admin_account.user.email,
+            "fullName": "Changed",
+            "isActive": admin_account.user.is_active,
+            "isSuperuser": admin_account.user.is_superuser,
+        },
     )
     delete_response = client.delete(
         f"/api/v1/users/{admin_account.user.id}",
         headers=headers,
     )
 
-    assert patch_response.status_code == 409
+    assert put_response.status_code == 409
     assert delete_response.status_code == 409
 
 
@@ -166,15 +192,19 @@ def test_current_user_cannot_delete_own_account(
     assert client.get("/api/v1/users/me", headers=headers).status_code == 200
 
 
-def test_current_user_can_patch_profile_and_password(
+def test_current_user_can_replace_profile_and_password(
     client: TestClient,
     user_account: AccountFixture,
 ) -> None:
     new_password = secrets.token_urlsafe(24)
-    response = client.patch(
+    response = client.put(
         "/api/v1/users/me",
         headers=login_headers(client, user_account),
-        json={"fullName": None, "password": new_password},
+        json={
+            "email": user_account.user.email,
+            "fullName": None,
+            "password": new_password,
+        },
     )
 
     assert response.status_code == 200
@@ -197,10 +227,15 @@ def test_disabled_user_token_stops_working(
     admin_account: AccountFixture,
 ) -> None:
     user_headers = login_headers(client, user_account)
-    response = client.patch(
+    response = client.put(
         f"/api/v1/users/{user_account.user.id}",
         headers=login_headers(client, admin_account),
-        json={"isActive": False},
+        json={
+            "email": user_account.user.email,
+            "fullName": user_account.user.full_name,
+            "isActive": False,
+            "isSuperuser": user_account.user.is_superuser,
+        },
     )
 
     assert response.status_code == 200

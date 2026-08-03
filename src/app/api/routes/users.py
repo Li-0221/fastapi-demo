@@ -5,23 +5,24 @@ from fastapi import APIRouter, Path, Query, Response, status
 
 from app.dependencies.auth import CurrentUser
 from app.dependencies.user import UserServiceDep
-from app.mappers.user import UserCommandMapper
 from app.presenters.user import UserPresenter
 from app.schemas.common import ApiResponse, PageData
 from app.schemas.user import (
     UserCreateRequest,
     UserData,
     UserListQuery,
-    UserPatchRequest,
-    UserSelfPatchRequest,
+    UserPutRequest,
+    UserSelfPutRequest,
 )
-from app.services.user_contracts import UserManagementScope
+from app.services.user_contracts import (
+    CreateUserCommand,
+    UpdateCurrentUserCommand,
+    UpdateUserCommand,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 # 路由与 OpenAPI 使用 camelCase, 函数内部仍保留 Python 的 snake_case 命名。
 UserIdPath = Annotated[UUID, Path(alias="userId")]
-
-# 这个文件里的scope只是表示这个接口是给用户使用还是管理员使用的
 
 
 @router.get("/me")
@@ -29,17 +30,15 @@ def get_current_user(current_user: CurrentUser) -> ApiResponse[UserData]:
     return ApiResponse(data=UserPresenter.detail(current_user))
 
 
-@router.patch("/me")
+@router.put("/me")
 def update_current_user(
-    request: UserSelfPatchRequest,
+    request: UserSelfPutRequest,
     current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
-    user = service.update_user(
+    user = service.update_current_user(
         actor=current_user,
-        user_id=current_user.id,
-        command=UserCommandMapper.self_patch(request),
-        scope=UserManagementScope.CURRENT_USER,
+        command=UpdateCurrentUserCommand.from_request(request),
     )
     return ApiResponse(data=UserPresenter.detail(user))
 
@@ -52,7 +51,7 @@ def create_user(
 ) -> ApiResponse[UserData]:
     user = service.create_user_as_admin(
         actor=current_user,
-        command=UserCommandMapper.create(request),
+        command=CreateUserCommand.from_request(request),
     )
     return ApiResponse(data=UserPresenter.detail(user))
 
@@ -81,18 +80,17 @@ def get_user(
     return ApiResponse(data=UserPresenter.detail(user))
 
 
-@router.patch("/{userId}")
+@router.put("/{userId}")
 def update_user(
     user_id: UserIdPath,
-    request: UserPatchRequest,
+    request: UserPutRequest,
     current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
-    user = service.update_user(
+    user = service.update_user_as_admin(
         actor=current_user,
         user_id=user_id,
-        command=UserCommandMapper.patch(request),
-        scope=UserManagementScope.ADMIN,
+        command=UpdateUserCommand.from_request(request),
     )
     return ApiResponse(data=UserPresenter.detail(user))
 

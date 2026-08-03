@@ -9,7 +9,6 @@ from app.core.security import (
 )
 from app.db.session import DatabaseSessionManager
 from app.exceptions import AuthenticationRequiredError, InactiveUserError, InvalidCredentialsError
-from app.mappers.user_result import UserResultMapper
 from app.repositories.user import UserRepository
 from app.services.user_contracts import UserResult
 
@@ -63,7 +62,7 @@ class AuthService:
             user = UserRepository(session).get_by_email(normalized_email)
             if user is not None:
                 facts = LoginUserFacts(
-                    user=UserResultMapper.from_model(user),
+                    user=UserResult.from_model(user),
                     hashed_password=user.hashed_password,
                 )
 
@@ -96,4 +95,4 @@ class AuthService:
                 raise AuthenticationRequiredError
             if not user.is_active:
                 raise InactiveUserError
-            return UserResultMapper.from_model(user)
+            return UserResult.from_model(user)

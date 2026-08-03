@@ -5,11 +5,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.dependencies.auth import AuthServiceDep
 from app.dependencies.user import UserServiceDep
-from app.mappers.user import UserCommandMapper
 from app.presenters.user import UserPresenter
 from app.schemas.auth import AccessTokenResponse
 from app.schemas.common import ApiResponse
 from app.schemas.user import UserData, UserRegisterRequest
+from app.services.user_contracts import RegisterUserCommand
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -19,7 +19,7 @@ def register_user(
     request: UserRegisterRequest,
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
-    user = service.register_user(UserCommandMapper.register(request))
+    user = service.register_user(RegisterUserCommand.from_request(request))
     return ApiResponse(data=UserPresenter.detail(user))
 
 

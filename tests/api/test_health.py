@@ -23,22 +23,28 @@ def test_openapi_documents_the_runtime_error_contract(client: TestClient) -> Non
     assert documented_schema == {"$ref": "#/components/schemas/ErrorResponse"}
 
 
-def test_openapi_matches_patch_and_path_runtime_contract(client: TestClient) -> None:
+def test_openapi_matches_put_and_path_runtime_contract(client: TestClient) -> None:
     schema = client.get("/api/v1/openapi.json").json()
     assert "delete" not in schema["paths"]["/api/v1/users/me"]
 
     user_path = schema["paths"]["/api/v1/users/{userId}"]
+    assert "put" in user_path
+    assert "patch" not in user_path
     path_parameters = user_path["get"]["parameters"]
     assert [parameter["name"] for parameter in path_parameters] == ["userId"]
 
-    patch_properties = schema["components"]["schemas"]["UserPatchRequest"]["properties"]
-    assert patch_properties["email"]["type"] == "string"
-    assert patch_properties["password"]["type"] == "string"
-    assert patch_properties["isActive"]["type"] == "boolean"
-    assert patch_properties["isSuperuser"]["type"] == "boolean"
-    for field_name in ("email", "password", "isActive", "isSuperuser"):
-        assert "default" not in patch_properties[field_name]
-    assert {"type": "null"} in patch_properties["fullName"]["anyOf"]
+    update_schema = schema["components"]["schemas"]["UserPutRequest"]
+    assert set(update_schema["required"]) == {
+        "email",
+        "fullName",
+        "isActive",
+        "isSuperuser",
+    }
+    assert "password" not in update_schema["required"]
+    assert {"type": "null"} in update_schema["properties"]["fullName"]["anyOf"]
+
+    self_update_schema = schema["components"]["schemas"]["UserSelfPutRequest"]
+    assert set(self_update_schema["required"]) == {"email", "fullName"}
 
 
 def test_method_not_allowed_keeps_protocol_header(client: TestClient) -> None:
