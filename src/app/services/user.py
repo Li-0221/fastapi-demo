@@ -4,8 +4,8 @@ from app.core.security import hash_password
 from app.db.session import DatabaseSessionManager
 from app.exceptions import (
     EmailAlreadyExistsError,
+    PermissionDeniedError,
     SelfAdministrationError,
-    SuperuserSelfDeleteError,
     UserNotFoundError,
 )
 from app.mappers.user_result import UserResultMapper
@@ -19,6 +19,7 @@ from app.services.user_contracts import (
     CreateUserCommand,
     RegisterUserCommand,
     UpdateUserCommand,
+    UserManagementScope,
     UserPageResult,
     UserResult,
 )
@@ -57,14 +58,35 @@ class UserService:
                 raise EmailAlreadyExistsError from None
             return UserResultMapper.from_model(user)
 
-    def get_user(self, user_id: UUID) -> UserResult:
+    # 管理用例由 Service 再次校验 actor, 不能只依赖 Router 是否隐藏或暴露入口。
+    def create_user_as_admin(
+        self,
+        *,
+        actor: UserResult,
+        command: CreateUserCommand,
+    ) -> UserResult:
+        if not actor.is_superuser:
+            raise PermissionDeniedError
+        return self.create_user(command)
+
+    def get_user(self, *, actor: UserResult, user_id: UUID) -> UserResult:
+        if not actor.is_superuser:
+            raise PermissionDeniedError
         with self.manager.session_scope() as session:
             user = UserRepository(session).get_by_id(user_id)
             if user is None:
                 raise UserNotFoundError
             return UserResultMapper.from_model(user)
 
-    def list_users(self, *, page: int, page_size: int) -> UserPageResult:
+    def list_users(
+        self,
+        *,
+        actor: UserResult,
+        page: int,
+        page_size: int,
+    ) -> UserPageResult:
+        if not actor.is_superuser:
+            raise PermissionDeniedError
         with self.manager.session_scope() as session:
             items, total = UserRepository(session).list_page(
                 offset=(page - 1) * page_size,
@@ -80,15 +102,25 @@ class UserService:
     def update_user(
         self,
         *,
-        actor_id: UUID,
+        actor: UserResult,
         user_id: UUID,
         command: UpdateUserCommand,
-        allow_self: bool,
+        scope: UserManagementScope,
     ) -> UserResult:
-        if actor_id == user_id and not allow_self:
-            raise SelfAdministrationError
+        # CURRENT_USER 必须操作自己且不能改权限字段; ADMIN 必须是管理员且不能走管理端点改自己。
+        if scope is UserManagementScope.CURRENT_USER:
+            if actor.id != user_id:
+                raise PermissionDeniedError
+            if command.is_active_supplied or command.is_superuser_supplied:
+                raise PermissionDeniedError
+        else:
+            if not actor.is_superuser:
+                raise PermissionDeniedError
+            if actor.id == user_id:
+                raise SelfAdministrationError
 
         hashed_password = None
+        # 密码哈希在打开 Session 前完成, 避免昂贵计算占用数据库连接或事务。
         if command.password_supplied and command.password is not None:
             hashed_password = hash_password(command.password)
         record = UserRecordUpdate(
@@ -119,11 +151,13 @@ class UserService:
     def delete_user(
         self,
         *,
-        actor_id: UUID,
+        actor: UserResult,
         user_id: UUID,
-        allow_self: bool,
     ) -> None:
-        if actor_id == user_id and not allow_self:
+        # 删除用户只属于管理员用例, 并且管理员不能通过管理端点删除自己。
+        if not actor.is_superuser:
+            raise PermissionDeniedError
+        if actor.id == user_id:
             raise SelfAdministrationError
 
         with self.manager.session_scope() as session:
@@ -131,7 +165,5 @@ class UserService:
             user = repository.get_by_id(user_id)
             if user is None:
                 raise UserNotFoundError
-            if actor_id == user_id and user.is_superuser:
-                raise SuperuserSelfDeleteError
             repository.delete(user)
             session.commit()

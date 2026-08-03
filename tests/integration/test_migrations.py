@@ -1,3 +1,4 @@
+import pytest
 from alembic.config import Config
 from sqlalchemy import Engine, inspect
 
@@ -18,7 +19,24 @@ def test_migration_upgrade_and_downgrade(
 
     command.upgrade(config, "head")
     assert inspect(database_engine).has_table("users")
+    command.check(config)
 
     command.downgrade(config, "base")
     assert not inspect(database_engine).has_table("users")
     get_database_settings.cache_clear()
+
+
+def test_offline_migration_accepts_percent_encoded_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv(
+        "APP_DATABASE_URL",
+        "postgresql+psycopg://localhost/example?application_name=fastapi%20demo",
+    )
+    get_database_settings.cache_clear()
+    try:
+        command.upgrade(Config("alembic.ini"), "head", sql=True)
+        assert "CREATE TABLE users" in capsys.readouterr().out
+    finally:
+        get_database_settings.cache_clear()

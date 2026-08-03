@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 
 from app.core.config import get_app_settings
 from app.dependencies.database import DatabaseManagerDep
-from app.exceptions import AuthenticationRequiredError, PermissionDeniedError
+from app.exceptions import AuthenticationRequiredError
 from app.services.auth import AuthService
 from app.services.user_contracts import UserResult
 
@@ -36,13 +36,5 @@ def get_current_user(
     return auth_service.authenticate_access_token(token)
 
 
+# Dependency 只负责认证并提供可信 actor; 角色和资源授权由拥有用户事实的 Service 判断。
 CurrentUser = Annotated[UserResult, Depends(get_current_user)]
-
-
-def get_current_superuser(current_user: CurrentUser) -> UserResult:
-    if not current_user.is_superuser:
-        raise PermissionDeniedError
-    return current_user
-
-
-CurrentSuperuser = Annotated[UserResult, Depends(get_current_superuser)]

@@ -32,28 +32,40 @@ class UserCommandMapper:
 
     @staticmethod
     def patch(request: UserPatchRequest) -> UpdateUserCommand:
+        # PATCH 必须同时传递字段值和 supplied 标志, 才能区分“未提供”和“显式 null”。
+        supplied_fields = request.model_fields_set
         return UpdateUserCommand(
-            email=str(request.email) if request.email is not None else None,
-            email_supplied="email" in request.model_fields_set,
+            email=(
+                str(request.email)
+                if "email" in supplied_fields and request.email is not None
+                else None
+            ),
+            email_supplied="email" in supplied_fields,
             full_name=request.full_name,
-            full_name_supplied="full_name" in request.model_fields_set,
-            password=request.password,
-            password_supplied="password" in request.model_fields_set,
-            is_active=request.is_active,
-            is_active_supplied="is_active" in request.model_fields_set,
-            is_superuser=request.is_superuser,
-            is_superuser_supplied="is_superuser" in request.model_fields_set,
+            full_name_supplied="full_name" in supplied_fields,
+            password=request.password if "password" in supplied_fields else None,
+            password_supplied="password" in supplied_fields,
+            is_active=request.is_active if "is_active" in supplied_fields else None,
+            is_active_supplied="is_active" in supplied_fields,
+            is_superuser=request.is_superuser if "is_superuser" in supplied_fields else None,
+            is_superuser_supplied="is_superuser" in supplied_fields,
         )
 
     @staticmethod
     def self_patch(request: UserSelfPatchRequest) -> UpdateUserCommand:
+        # 自助更新不拥有权限字段, 即使未来 Router 误传也不会生成对应的 supplied 标志。
+        supplied_fields = request.model_fields_set
         return UpdateUserCommand(
-            email=str(request.email) if request.email is not None else None,
-            email_supplied="email" in request.model_fields_set,
+            email=(
+                str(request.email)
+                if "email" in supplied_fields and request.email is not None
+                else None
+            ),
+            email_supplied="email" in supplied_fields,
             full_name=request.full_name,
-            full_name_supplied="full_name" in request.model_fields_set,
-            password=request.password,
-            password_supplied="password" in request.model_fields_set,
+            full_name_supplied="full_name" in supplied_fields,
+            password=request.password if "password" in supplied_fields else None,
+            password_supplied="password" in supplied_fields,
             is_active=None,
             is_active_supplied=False,
             is_superuser=None,

@@ -1,8 +1,9 @@
 import secrets
 
+import pytest
 from fastapi.testclient import TestClient
 
-from tests.support import AccountFixture, login_headers
+from tests.support import AccountFactory, AccountFixture, login_headers
 
 
 def test_regular_user_cannot_list_users(
@@ -13,6 +14,35 @@ def test_regular_user_cannot_list_users(
         "/api/v1/users",
         headers=login_headers(client, user_account),
     )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
+
+
+@pytest.mark.parametrize("method", ["post", "get", "patch", "delete"])
+def test_regular_user_cannot_use_admin_user_routes(
+    client: TestClient,
+    user_account: AccountFixture,
+    admin_account: AccountFixture,
+    method: str,
+) -> None:
+    headers = login_headers(client, user_account)
+    user_path = f"/api/v1/users/{admin_account.user.id}"
+    if method == "post":
+        response = client.post(
+            "/api/v1/users",
+            headers=headers,
+            json={
+                "email": "unauthorized@example.com",
+                "password": secrets.token_urlsafe(24),
+            },
+        )
+    elif method == "get":
+        response = client.get(user_path, headers=headers)
+    elif method == "patch":
+        response = client.patch(user_path, headers=headers, json={"fullName": "Denied"})
+    else:
+        response = client.delete(user_path, headers=headers)
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "PERMISSION_DENIED"
@@ -57,6 +87,15 @@ def test_admin_user_crud_and_pagination(
     assert patch_response.json()["data"]["fullName"] is None
     assert patch_response.json()["data"]["isActive"] is False
 
+    unchanged_response = client.patch(
+        f"/api/v1/users/{user_id}",
+        headers=headers,
+        json={},
+    )
+    assert unchanged_response.status_code == 200
+    assert unchanged_response.json()["data"]["email"] == "managed@example.com"
+    assert unchanged_response.json()["data"]["fullName"] is None
+
     delete_response = client.delete(f"/api/v1/users/{user_id}", headers=headers)
     assert delete_response.status_code == 204
     assert client.get(f"/api/v1/users/{user_id}", headers=headers).status_code == 404
@@ -75,6 +114,7 @@ def test_patch_rejects_null_for_non_nullable_field(
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["details"][0]["location"] == ["body", "email"]
 
 
 def test_self_update_rejects_admin_fields(
@@ -110,14 +150,80 @@ def test_admin_route_refuses_self_management(
     assert delete_response.status_code == 409
 
 
-def test_deleted_user_token_stops_working(
+def test_current_user_cannot_delete_own_account(
     client: TestClient,
     user_account: AccountFixture,
 ) -> None:
     headers = login_headers(client, user_account)
 
-    assert client.delete("/api/v1/users/me", headers=headers).status_code == 204
-    response = client.get("/api/v1/users/me", headers=headers)
+    response = client.delete(
+        f"/api/v1/users/{user_account.user.id}",
+        headers=headers,
+    )
 
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
+    assert client.get("/api/v1/users/me", headers=headers).status_code == 200
+
+
+def test_current_user_can_patch_profile_and_password(
+    client: TestClient,
+    user_account: AccountFixture,
+) -> None:
+    new_password = secrets.token_urlsafe(24)
+    response = client.patch(
+        "/api/v1/users/me",
+        headers=login_headers(client, user_account),
+        json={"fullName": None, "password": new_password},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["fullName"] is None
+    old_login = client.post(
+        "/api/v1/auth/login/access-token",
+        data={"username": user_account.user.email, "password": user_account.password},
+    )
+    new_login = client.post(
+        "/api/v1/auth/login/access-token",
+        data={"username": user_account.user.email, "password": new_password},
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+
+def test_disabled_user_token_stops_working(
+    client: TestClient,
+    user_account: AccountFixture,
+    admin_account: AccountFixture,
+) -> None:
+    user_headers = login_headers(client, user_account)
+    response = client.patch(
+        f"/api/v1/users/{user_account.user.id}",
+        headers=login_headers(client, admin_account),
+        json={"isActive": False},
+    )
+
+    assert response.status_code == 200
+    rejected = client.get("/api/v1/users/me", headers=user_headers)
+    assert rejected.status_code == 403
+    assert rejected.json()["error"]["code"] == "INACTIVE_USER"
+
+
+def test_user_list_empty_page_is_stable(
+    client: TestClient,
+    admin_account: AccountFixture,
+    account_factory: AccountFactory,
+) -> None:
+    account_factory.create()
+    response = client.get(
+        "/api/v1/users?page=2&pageSize=2",
+        headers=login_headers(client, admin_account),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "items": [],
+        "total": 2,
+        "page": 2,
+        "pageSize": 2,
+    }

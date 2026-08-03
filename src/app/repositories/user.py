@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -20,7 +20,8 @@ class InvalidUserRecordUpdateError(Exception):
 class UserRecordCreate:
     email: str
     full_name: str | None
-    hashed_password: str
+    # 只从调试 repr 中隐藏哈希, Repository 仍会收到并持久化真实值。
+    hashed_password: str = field(repr=False)
     is_active: bool
     is_superuser: bool
 
@@ -31,7 +32,8 @@ class UserRecordUpdate:
     email_supplied: bool
     full_name: str | None
     full_name_supplied: bool
-    hashed_password: str | None
+    # None 只有在 password_supplied=False 时表示“不更新密码”, 两者必须成对解释。
+    hashed_password: str | None = field(repr=False)
     password_supplied: bool
     is_active: bool | None
     is_active_supplied: bool

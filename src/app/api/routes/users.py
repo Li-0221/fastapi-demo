@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Path, Query, Response, status
 
-from app.dependencies.auth import CurrentSuperuser, CurrentUser
+from app.dependencies.auth import CurrentUser
 from app.dependencies.user import UserServiceDep
 from app.mappers.user import UserCommandMapper
 from app.presenters.user import UserPresenter
@@ -15,9 +15,13 @@ from app.schemas.user import (
     UserPatchRequest,
     UserSelfPatchRequest,
 )
+from app.services.user_contracts import UserManagementScope
 
 router = APIRouter(prefix="/users", tags=["users"])
-UserIdPath = Annotated[UUID, Path()]
+# 路由与 OpenAPI 使用 camelCase, 函数内部仍保留 Python 的 snake_case 命名。
+UserIdPath = Annotated[UUID, Path(alias="userId")]
+
+# 这个文件里的scope只是表示这个接口是给用户使用还是管理员使用的
 
 
 @router.get("/me")
@@ -32,85 +36,75 @@ def update_current_user(
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
     user = service.update_user(
-        actor_id=current_user.id,
+        actor=current_user,
         user_id=current_user.id,
         command=UserCommandMapper.self_patch(request),
-        allow_self=True,
+        scope=UserManagementScope.CURRENT_USER,
     )
     return ApiResponse(data=UserPresenter.detail(user))
-
-
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-def delete_current_user(
-    current_user: CurrentUser,
-    service: UserServiceDep,
-) -> Response:
-    service.delete_user(
-        actor_id=current_user.id,
-        user_id=current_user.id,
-        allow_self=True,
-    )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_user(
     request: UserCreateRequest,
-    current_superuser: CurrentSuperuser,
+    current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
-    del current_superuser
-    user = service.create_user(UserCommandMapper.create(request))
+    user = service.create_user_as_admin(
+        actor=current_user,
+        command=UserCommandMapper.create(request),
+    )
     return ApiResponse(data=UserPresenter.detail(user))
 
 
 @router.get("")
 def list_users(
     query: Annotated[UserListQuery, Query()],
-    current_superuser: CurrentSuperuser,
+    current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[PageData[UserData]]:
-    del current_superuser
-    result = service.list_users(page=query.page, page_size=query.page_size)
+    result = service.list_users(
+        actor=current_user,
+        page=query.page,
+        page_size=query.page_size,
+    )
     return ApiResponse(data=UserPresenter.page(result))
 
 
-@router.get("/{user_id}")
+@router.get("/{userId}")
 def get_user(
     user_id: UserIdPath,
-    current_superuser: CurrentSuperuser,
+    current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
-    del current_superuser
-    user = service.get_user(user_id)
+    user = service.get_user(actor=current_user, user_id=user_id)
     return ApiResponse(data=UserPresenter.detail(user))
 
 
-@router.patch("/{user_id}")
+@router.patch("/{userId}")
 def update_user(
     user_id: UserIdPath,
     request: UserPatchRequest,
-    current_superuser: CurrentSuperuser,
+    current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[UserData]:
     user = service.update_user(
-        actor_id=current_superuser.id,
+        actor=current_user,
         user_id=user_id,
         command=UserCommandMapper.patch(request),
-        allow_self=False,
+        scope=UserManagementScope.ADMIN,
     )
     return ApiResponse(data=UserPresenter.detail(user))
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{userId}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: UserIdPath,
-    current_superuser: CurrentSuperuser,
+    current_user: CurrentUser,
     service: UserServiceDep,
 ) -> Response:
     service.delete_user(
-        actor_id=current_superuser.id,
+        actor=current_user,
         user_id=user_id,
-        allow_self=False,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

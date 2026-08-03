@@ -36,11 +36,14 @@ def error_json_response(
             details=tuple(details) if details is not None else (),
         )
     )
-    # This is the actual JSON serialization boundary expected by Starlette.
+    # 这里才是真正交给 Starlette 的 JSON 序列化边界, 因此显式使用公开 alias。
     content = response.model_dump(mode="json", by_alias=True)
-    # tripguru-ast: ignore[TG-DS001] - Starlette response headers are a mapping boundary
-    headers = {"WWW-Authenticate": "Bearer"} if status_code == 401 else None
-    return JSONResponse(status_code=status_code, content=content, headers=headers)
+    json_response = JSONResponse(status_code=status_code, content=content)
+    # 未处理异常由最外层错误中间件生成响应, 可能绕过 RequestIdMiddleware 的返回路径。
+    json_response.headers["X-Request-ID"] = request_id
+    if status_code == 401:
+        json_response.headers["WWW-Authenticate"] = "Bearer"
+    return json_response
 
 
 async def handle_app_error(request: Request, error: AppError) -> JSONResponse:
@@ -83,12 +86,18 @@ async def handle_http_error(
         message = "Resource not found"
     if error.status_code == 405:
         message = "Method not allowed"
-    return error_json_response(
+    response = error_json_response(
         status_code=error.status_code,
         code="HTTP_ERROR",
         message=message,
         request_id=request.state.request_id,
     )
+    if error.headers is not None:
+        # 只恢复 HTTP 协议必需的安全 header, 避免把框架异常中的任意 header 整包透传。
+        for header_name, header_value in error.headers.items():
+            if header_name.lower() in {"allow", "www-authenticate"}:
+                response.headers[header_name] = header_value
+    return response
 
 
 async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:

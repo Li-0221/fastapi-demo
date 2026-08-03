@@ -42,11 +42,5 @@ class EmailAlreadyExistsError(AppError):
 
 class SelfAdministrationError(AppError):
     code = "SELF_ADMINISTRATION_NOT_ALLOWED"
-    message = "Use the current-user endpoint to manage your own account"
-    status_code = 409
-
-
-class SuperuserSelfDeleteError(AppError):
-    code = "SUPERUSER_SELF_DELETE_NOT_ALLOWED"
-    message = "A superuser cannot delete their own account"
+    message = "You cannot manage your own account through an administrator endpoint"
     status_code = 409

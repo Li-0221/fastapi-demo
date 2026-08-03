@@ -1,5 +1,5 @@
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fastapi.testclient import TestClient
 
@@ -11,7 +11,7 @@ from app.services.user_contracts import CreateUserCommand, UserResult
 @dataclass(frozen=True, slots=True)
 class AccountFixture:
     user: UserResult
-    password: str
+    password: str = field(repr=False)
 
 
 class AccountFactory:

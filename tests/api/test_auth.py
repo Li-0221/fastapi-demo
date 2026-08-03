@@ -75,6 +75,16 @@ def test_invalid_credentials_return_401_and_bearer_challenge(
     assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
 
+def test_login_rejects_oversized_credentials(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/login/access-token",
+        data={"username": "x" * 256, "password": "x" * 129},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
+
+
 def test_inactive_user_cannot_log_in(
     client: TestClient,
     account_factory: AccountFactory,
@@ -95,3 +105,29 @@ def test_missing_token_uses_unified_error_contract(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert response.headers["X-Request-ID"] == response.json()["error"]["requestId"]
+
+
+def test_malformed_token_uses_bearer_challenge(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": "Bearer not-a-jwt"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
+def test_request_body_rejects_python_field_names(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "snake-case@example.com",
+            "full_name": "Not part of the wire contract",
+            "password": secrets.token_urlsafe(24),
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"

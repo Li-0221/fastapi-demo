@@ -13,7 +13,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 database_settings = get_database_settings()
-config.set_main_option("sqlalchemy.url", database_settings.url)
+# Alembic 会通过 ConfigParser 读取该值; URL 中的 `%` 必须转义为 `%%`, 否则会被误判为插值语法。
+config.set_main_option("sqlalchemy.url", database_settings.url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 

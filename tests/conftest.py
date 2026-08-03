@@ -8,7 +8,7 @@ from sqlalchemy import Engine, create_engine
 from testcontainers.community.postgres import PostgresContainer
 
 os.environ.setdefault("APP_SECRET_KEY", secrets.token_urlsafe(48))
-os.environ.setdefault("APP_ENVIRONMENT", "test")
+os.environ.setdefault("APP_DATABASE_URL", "postgresql+psycopg://localhost/unused")
 
 from app.db.base import Base
 from app.db.session import DatabaseSessionManager

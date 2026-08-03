@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,10 +11,10 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="APP_", extra="ignore")
 
     name: str = "FastAPI Demo"
-    environment: Literal["local", "test", "staging", "production"] = "local"
     api_v1_prefix: str = "/api/v1"
     secret_key: Annotated[SecretStr, Field(min_length=32)]
-    access_token_expire_minutes: int = 30
+    # 防止配置为立即失效或意外长期有效的 access token, 最长允许一天。
+    access_token_expire_minutes: Annotated[int, Field(gt=0, le=1440)] = 30
 
 
 class DatabaseSettings(BaseSettings):
@@ -36,9 +36,11 @@ class DatabaseSettings(BaseSettings):
 
 @lru_cache
 def get_app_settings() -> AppSettings:
-    return AppSettings()
+    # Pylance 无法识别 BaseSettings 的环境变量数据源, 运行时仍会校验必填配置。
+    return AppSettings()  # pyright: ignore[reportCallIssue]
 
 
 @lru_cache
 def get_database_settings() -> DatabaseSettings:
-    return DatabaseSettings()
+    # Pylance 无法识别 BaseSettings 的环境变量数据源, 运行时仍会校验必填配置。
+    return DatabaseSettings()  # pyright: ignore[reportCallIssue]

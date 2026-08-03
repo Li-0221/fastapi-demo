@@ -48,7 +48,9 @@ fastapi-demo/
 │   ├── unit/                      # 配置等快速单元测试
 │   ├── conftest.py                # pytest fixture 和测试数据库生命周期
 │   └── support.py                 # 测试数据工厂
+├── .dockerignore                  # 排除 Secret、虚拟环境和本地构建产物
 ├── .env.example                   # 本地环境变量安全示例
+├── .python-version                # 锁定本地与容器的 Python 3.12 基线
 ├── .pre-commit-config.yaml        # 提交前检查配置
 ├── AGENTS.md                      # 本仓库工程约束
 ├── Dockerfile                     # API 容器镜像定义
@@ -77,21 +79,26 @@ owner；Repository 不判断管理员权限，也不偷偷 commit；Presenter �
 应用只支持 `postgresql+psycopg`，没有 SQLite fallback。应用不会自行读取 `.env` 文件；
 Compose 使用 `.env` 启动数据库，本地 shell 再显式导出同一份配置。
 
+本地需要 Python 3.12、uv 0.11 和支持 `--wait` 的 Docker Compose。仓库内的
+`.python-version` 会让 uv 选择 Python 3.12。
+
 ```bash
-cd /home/tripguru/backend/fastapi-demo
+cd fastapi-demo
 cp .env.example .env
 # 填写 .env 中的本地隔离配置
 set -a
 source .env
 set +a
-docker compose up -d db
+docker compose up -d --wait db
 uv sync --all-groups
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
 `APP_SECRET_KEY` 至少 32 个字符。`APP_DATABASE_URL` 必须使用 `postgresql+psycopg` driver，
-并连接到 Compose 映射到本机的 PostgreSQL 端口。`.env` 已被 Git 忽略，不能提交。
+并连接到 Compose 映射到本机的 PostgreSQL 端口。可以用
+`python -c 'import secrets; print(secrets.token_urlsafe(48))'` 生成本地 Secret。
+应用会在启动时校验这两项必填配置；`.env` 已被 Git 忽略，不能提交。
 
 打开：
 
@@ -154,14 +161,23 @@ Swagger 和通用 OAuth2 客户端无法识别。
 PATCH 严格区分三种状态：字段未提供表示保持原值；`fullName: null` 表示清空；不可为空的
 字段（例如 `email`、`isActive`）收到 `null` 会在 request schema 边界返回 `422`。
 
+生产部署必须在网关或反向代理为公开的注册、登录端点设置请求体上限和按来源限流。
+限流通常需要共享存储与可信客户端地址，不属于这个单进程教学模板的应用内能力。
+
 ## 5. PostgreSQL 容器
 
 Compose 只管理本地 PostgreSQL，不在数据库容器启动时隐式执行 migration：
 
 ```bash
-docker compose up -d db
+docker compose up -d --wait db
 docker compose ps
 docker compose logs db
+```
+
+本地验证 API 镜像：
+
+```bash
+docker build -t fastapi-demo .
 ```
 
 生产环境应把 migration 作为独立部署步骤，并从 secret manager 注入配置，不要让每个 API
@@ -177,6 +193,8 @@ uv run pytest --cov=app --cov-report=term-missing
 uv run pre-commit run --all-files
 uv run alembic check
 ```
+
+首次 clone 后可运行 `uv run pre-commit install` 安装提交钩子。
 
 当模型变化时，先确认当前只有一个 migration head，再生成并审查新 revision：
 

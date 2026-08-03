@@ -4,7 +4,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.openapi import ERROR_RESPONSES
 from app.api.router import api_router
-from app.core.config import get_app_settings
+from app.core.config import get_app_settings, get_database_settings
 from app.exception_handlers import (
     handle_app_error,
     handle_http_error,
@@ -17,6 +17,8 @@ from app.middleware import RequestIdMiddleware
 
 def create_app() -> FastAPI:
     settings = get_app_settings()
+    # 在启动边界校验必填数据库配置, 但不连接数据库, 也不自动执行 migration。
+    get_database_settings()
     application = FastAPI(
         title=settings.name,
         version="0.1.0",
