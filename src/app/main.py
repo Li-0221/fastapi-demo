@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -5,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.openapi import ERROR_RESPONSES
 from app.api.router import api_router
 from app.core.config import get_app_settings, get_database_settings
+from app.dependencies.database import get_database_manager
 from app.exception_handlers import (
     handle_app_error,
     handle_http_error,
@@ -13,6 +17,18 @@ from app.exception_handlers import (
 )
 from app.exceptions import AppError
 from app.middleware import RequestIdMiddleware
+
+
+@asynccontextmanager
+async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
+    manager = get_database_manager()
+    try:
+        yield
+    finally:
+        try:
+            manager.dispose()
+        finally:
+            get_database_manager.cache_clear()
 
 
 def create_app() -> FastAPI:
@@ -26,6 +42,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         responses=ERROR_RESPONSES,
+        lifespan=application_lifespan,
     )
     application.add_middleware(RequestIdMiddleware)
     application.add_exception_handler(AppError, handle_app_error)  # type: ignore[arg-type]

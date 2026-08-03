@@ -73,6 +73,7 @@ HTTP form -> Router -> Command -> AuthService -> short Session -> Repository -> 
 这个方向很重要：FastAPI dependency 只注入可复用的 session manager，不通过 `yield`
 持有业务 Session；Service 的每个公开用例创建并关闭短 Session，是唯一的 commit/rollback
 owner；Repository 不判断管理员权限，也不偷偷 commit；Presenter 只映射公开 allowlist 字段。
+应用 lifespan 拥有数据库 Engine，并在进程关闭时释放连接池。
 
 ## 2. 本地启动（Docker PostgreSQL）
 

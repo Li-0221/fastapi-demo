@@ -7,11 +7,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 class DatabaseSessionManager:
     def __init__(self, engine: Engine) -> None:
+        self.engine = engine
         self.session_factory = sessionmaker(
             bind=engine,
             autoflush=False,
             expire_on_commit=False,
         )
+
+    def dispose(self) -> None:
+        self.engine.dispose()
 
     @contextmanager
     def session_scope(self) -> Iterator[Session]:

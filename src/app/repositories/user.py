@@ -1,15 +1,25 @@
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from psycopg.errors import UniqueViolation
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 
+USER_EMAIL_UNIQUE_DATABASE_NAME = "ix_users_email"
+
+
+def is_email_unique_violation(error: IntegrityError) -> bool:
+    return (
+        isinstance(error.orig, UniqueViolation)
+        and error.orig.diag.constraint_name == USER_EMAIL_UNIQUE_DATABASE_NAME
+    )
+
 
 class DuplicateUserRecordError(Exception):
-    """Raised when a database uniqueness constraint rejects a user write."""
+    """Raised when the database rejects a duplicate user email."""
 
 
 class InvalidUserRecordUpdateError(Exception):
@@ -71,7 +81,9 @@ class UserRepository:
         try:
             self.session.flush()
         except IntegrityError as error:
-            raise DuplicateUserRecordError from error
+            if is_email_unique_violation(error):
+                raise DuplicateUserRecordError from error
+            raise
         return user
 
     def update(self, *, user: User, data: UserRecordUpdate) -> User:
@@ -97,7 +109,9 @@ class UserRepository:
         try:
             self.session.flush()
         except IntegrityError as error:
-            raise DuplicateUserRecordError from error
+            if is_email_unique_violation(error):
+                raise DuplicateUserRecordError from error
+            raise
         return user
 
     def delete(self, user: User) -> None:
