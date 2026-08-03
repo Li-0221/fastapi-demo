@@ -16,18 +16,6 @@
 - 使用 `uv` 管理依赖，应用仓库必须提交 `uv.lock`。
 - 本地 PostgreSQL 由 `compose.yaml` 提供；测试数据库由 Testcontainers 提供。
 
-## 与 TripGuru 公司微服务规范的边界
-
-本项目是可独立使用的公开 starter，不是 TripGuru 生产微服务。以下内容属于公司微服务体系中的场景规则，只有项目真实具备对应边界时才启用，不能为模仿公司目录而预先搭建空实现：
-
-- Gateway 全量透传规则只适用于 API Gateway：业务 Router 调用统一 proxy，由 proxy 保留 method、path、重复 query、原始 body/media type，并集中处理 header 过滤、可信身份注入、timeout 和 streaming 资源释放。
-- `Asia/Shanghai`、`America/Los_Angeles`、`America/New_York` 等时区选项属于公司产品交互配置，不是通用后端常量；本项目只保留 RFC3339 和 UTC 数据语义。
-- `ota-event-v2` 的 Presenter、worker 和 Session 实现只作为公司代码参考，不复制具体类名或 legacy `DBSession` dependency；本项目以自身代码和测试为准。
-- `AsyncSession` 和异步 `database_session_scope` 规则只适用于采用异步 SQLAlchemy 的公司服务；本项目当前使用同步 Session，不混用两套生命周期。
-- Provider/supplier 接入规则只在引入外部供应商时适用：raw payload 必须在 adapter/client 边界校验并转换为本服务拥有的 typed facts，不能扩散到 Service 或 Repository。
-- Helm、GitOps values 和跨环境部署配置清理规则只在仓库实际拥有这些部署文件时适用；当前配置 owner 是 Settings、`.env.example` 和 `compose.yaml`。
-- 公司 worker 示例中的业务名称和代码片段不是 contract；本项目只有真正新增 worker 时才执行下文的短 Session、可测试 tick、幂等和恢复规则。
-
 ## 抽象与依赖原则
 
 - 复用仓库现有类型和边界；只有 trust、owner、语义、生命周期或独立版本轴不同时才新增转换层。
