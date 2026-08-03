@@ -3,9 +3,8 @@
 这是一个供初学者阅读、运行和继续扩展的后端模板。它参考了
 [`full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template/tree/master/backend/app)
 的应用入口、配置、认证和测试思路，但把中小型项目最容易混乱的职责拆开了。
-实现同时遵循当前工作区的
-[`BACKEND_ENGINEERING_CONVENTIONS.md`](../BACKEND_ENGINEERING_CONVENTIONS.md)，重点落实
-Session 生命周期、事务 owner、内部 contract 和 Presenter 边界。
+实现同时遵循仓库内的 [`AGENTS.md`](AGENTS.md)，重点落实 Session 生命周期、事务 owner、
+内部 contract 和 Presenter 边界。
 
 模板已包含：
 
