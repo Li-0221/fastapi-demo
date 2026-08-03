@@ -9,7 +9,7 @@
 模板已包含：
 
 - 用户公开注册、OAuth2 密码登录和 JWT Bearer 认证
-- 当前用户读取、部分更新和删除
+- 当前用户读取和部分更新
 - 管理员用户创建、分页列表、详情、部分更新和删除
 - Argon2 密码哈希，公开响应永不包含密码哈希
 - SQLAlchemy 2、Alembic 与 Docker PostgreSQL
@@ -151,7 +151,6 @@ Swagger 和通用 OAuth2 客户端无法识别。
 | `POST` | `/api/v1/auth/login/access-token` | 公开 | 登录并签发 access token |
 | `GET` | `/api/v1/users/me` | 登录 | 查看自己 |
 | `PATCH` | `/api/v1/users/me` | 登录 | 修改自己的邮箱、姓名或密码 |
-| `DELETE` | `/api/v1/users/me` | 登录 | 删除自己的普通账号 |
 | `POST` | `/api/v1/users` | 管理员 | 创建用户 |
 | `GET` | `/api/v1/users` | 管理员 | 稳定排序的分页列表 |
 | `GET` | `/api/v1/users/{userId}` | 管理员 | 用户详情 |
