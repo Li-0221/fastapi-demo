@@ -45,6 +45,13 @@ def test_openapi_matches_put_and_path_runtime_contract(client: TestClient) -> No
 
     self_update_schema = schema["components"]["schemas"]["UserSelfPutRequest"]
     assert set(self_update_schema["required"]) == {"email", "fullName"}
+    assert "password" not in self_update_schema["properties"]
+
+    password_path = schema["paths"]["/api/v1/users/me/password"]
+    assert set(password_path) == {"put"}
+    assert "204" in password_path["put"]["responses"]
+    password_schema = schema["components"]["schemas"]["UserPasswordChangeRequest"]
+    assert set(password_schema["required"]) == {"currentPassword", "newPassword"}
 
 
 def test_method_not_allowed_keeps_protocol_header(client: TestClient) -> None:

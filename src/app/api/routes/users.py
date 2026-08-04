@@ -11,10 +11,12 @@ from app.schemas.user import (
     UserCreateRequest,
     UserData,
     UserListQuery,
+    UserPasswordChangeRequest,
     UserPutRequest,
     UserSelfPutRequest,
 )
 from app.services.user_contracts import (
+    ChangeCurrentUserPasswordCommand,
     CreateUserCommand,
     UpdateCurrentUserCommand,
     UpdateUserCommand,
@@ -41,6 +43,19 @@ def update_current_user(
         command=UpdateCurrentUserCommand.from_request(request),
     )
     return ApiResponse(data=UserPresenter.detail(user))
+
+
+@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_current_user_password(
+    request: UserPasswordChangeRequest,
+    current_user: CurrentUser,
+    service: UserServiceDep,
+) -> Response:
+    service.change_current_user_password(
+        actor=current_user,
+        command=ChangeCurrentUserPasswordCommand.from_request(request),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

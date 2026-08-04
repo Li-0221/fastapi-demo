@@ -9,7 +9,7 @@
 模板已包含：
 
 - 用户公开注册、OAuth2 密码登录和 JWT Bearer 认证
-- 当前用户读取和完整资料更新
+- 当前用户读取、完整资料更新和校验旧密码后的密码修改
 - 管理员用户创建、分页列表、详情、完整更新和删除
 - Argon2 密码哈希，公开响应永不包含密码哈希
 - SQLAlchemy 2、Alembic 与 Docker PostgreSQL
@@ -150,7 +150,8 @@ Swagger 和通用 OAuth2 客户端无法识别。
 | `POST` | `/api/v1/auth/register` | 公开 | 注册普通用户 |
 | `POST` | `/api/v1/auth/login/access-token` | 公开 | 登录并签发 access token |
 | `GET` | `/api/v1/users/me` | 登录 | 查看自己 |
-| `PUT` | `/api/v1/users/me` | 登录 | 完整更新自己的可编辑资料，可选修改密码 |
+| `PUT` | `/api/v1/users/me` | 登录 | 完整更新自己的邮箱和姓名 |
+| `PUT` | `/api/v1/users/me/password` | 登录 | 校验当前密码后修改密码 |
 | `POST` | `/api/v1/users` | 管理员 | 创建用户 |
 | `GET` | `/api/v1/users` | 管理员 | 稳定排序的分页列表 |
 | `GET` | `/api/v1/users/{userId}` | 管理员 | 用户详情 |
@@ -159,7 +160,8 @@ Swagger 和通用 OAuth2 客户端无法识别。
 
 PUT 要求完整提供当前资源可编辑的字段；`fullName: null` 表示清空姓名，不可为空的字段
 （例如 `email`、`isActive`）缺失或收到 `null` 会在 request schema 边界返回 `422`。
-密码无法从详情接口回读，因此是可选的 write-only 字段；省略或传 `null` 表示保持现有密码。
+用户修改密码必须调用 `/users/me/password` 并提供 `currentPassword` 和 `newPassword`；管理员
+更新其他用户时，`password` 仍是可选的 write-only 字段，省略或传 `null` 表示不重置密码。
 
 生产部署必须在网关或反向代理为公开的注册、登录端点设置请求体上限和按来源限流。
 限流通常需要共享存储与可信客户端地址，不属于这个单进程教学模板的应用内能力。
@@ -217,4 +219,5 @@ uv run alembic upgrade head
 5. 结构化日志、指标和 tracing
 
 JWT access token 本身无法主动撤销。当前实现每次请求都会重新查询用户，因此删除或禁用用户
-会立即阻止旧 token；若要支持“登出当前设备”，需要增加 token id 和撤销存储。
+会立即阻止旧 token；修改密码只影响后续登录，已经签发的 token 仍会在过期前有效。若要支持
+“登出当前设备”或“修改密码后退出其他设备”，需要增加 token id/version 和撤销存储。

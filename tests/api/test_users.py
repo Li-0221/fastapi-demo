@@ -192,23 +192,58 @@ def test_current_user_cannot_delete_own_account(
     assert client.get("/api/v1/users/me", headers=headers).status_code == 200
 
 
-def test_current_user_can_replace_profile_and_password(
+def test_current_user_can_replace_profile(
     client: TestClient,
     user_account: AccountFixture,
 ) -> None:
-    new_password = secrets.token_urlsafe(24)
     response = client.put(
         "/api/v1/users/me",
         headers=login_headers(client, user_account),
         json={
             "email": user_account.user.email,
             "fullName": None,
-            "password": new_password,
         },
     )
 
     assert response.status_code == 200
     assert response.json()["data"]["fullName"] is None
+
+
+def test_profile_update_cannot_bypass_password_change_contract(
+    client: TestClient,
+    user_account: AccountFixture,
+) -> None:
+    response = client.put(
+        "/api/v1/users/me",
+        headers=login_headers(client, user_account),
+        json={
+            "email": user_account.user.email,
+            "fullName": user_account.user.full_name,
+            "password": secrets.token_urlsafe(24),
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_current_user_can_change_password(
+    client: TestClient,
+    user_account: AccountFixture,
+) -> None:
+    new_password = secrets.token_urlsafe(24)
+
+    response = client.put(
+        "/api/v1/users/me/password",
+        headers=login_headers(client, user_account),
+        json={
+            "currentPassword": user_account.password,
+            "newPassword": new_password,
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
     old_login = client.post(
         "/api/v1/auth/login/access-token",
         data={"username": user_account.user.email, "password": user_account.password},
@@ -219,6 +254,42 @@ def test_current_user_can_replace_profile_and_password(
     )
     assert old_login.status_code == 401
     assert new_login.status_code == 200
+
+
+def test_password_change_rejects_incorrect_current_password(
+    client: TestClient,
+    user_account: AccountFixture,
+) -> None:
+    response = client.put(
+        "/api/v1/users/me/password",
+        headers=login_headers(client, user_account),
+        json={
+            "currentPassword": secrets.token_urlsafe(24),
+            "newPassword": secrets.token_urlsafe(24),
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    original_login = client.post(
+        "/api/v1/auth/login/access-token",
+        data={"username": user_account.user.email, "password": user_account.password},
+    )
+    assert original_login.status_code == 200
+
+
+def test_password_change_requires_authentication(client: TestClient) -> None:
+    response = client.put(
+        "/api/v1/users/me/password",
+        json={
+            "currentPassword": secrets.token_urlsafe(24),
+            "newPassword": secrets.token_urlsafe(24),
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
 
 
 def test_disabled_user_token_stops_working(

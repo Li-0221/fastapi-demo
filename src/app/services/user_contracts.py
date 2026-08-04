@@ -6,6 +6,7 @@ from uuid import UUID
 from app.models.user import User
 from app.schemas.user import (
     UserCreateRequest,
+    UserPasswordChangeRequest,
     UserPutRequest,
     UserRegisterRequest,
     UserSelfPutRequest,
@@ -51,14 +52,25 @@ class CreateUserCommand:
 class UpdateCurrentUserCommand:
     email: str
     full_name: str | None
-    password: str | None = field(repr=False)
 
     @classmethod
     def from_request(cls, request: UserSelfPutRequest) -> Self:
         return cls(
             email=str(request.email),
             full_name=request.full_name,
-            password=request.password,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ChangeCurrentUserPasswordCommand:
+    current_password: str = field(repr=False)
+    new_password: str = field(repr=False)
+
+    @classmethod
+    def from_request(cls, request: UserPasswordChangeRequest) -> Self:
+        return cls(
+            current_password=request.current_password,
+            new_password=request.new_password,
         )
 
 

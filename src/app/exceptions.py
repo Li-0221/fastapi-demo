@@ -16,6 +16,12 @@ class InvalidCredentialsError(AppError):
     status_code = 401
 
 
+class InvalidCurrentPasswordError(AppError):
+    code = "INVALID_CURRENT_PASSWORD"
+    message = "Current password is incorrect"
+    status_code = 400
+
+
 class InactiveUserError(AppError):
     code = "INACTIVE_USER"
     message = "This user account is inactive"

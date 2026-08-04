@@ -39,7 +39,11 @@ class UserPutRequest(RqModel):
 class UserSelfPutRequest(RqModel):
     email: EmailField
     full_name: NameField
-    password: OptionalPasswordField = None
+
+
+class UserPasswordChangeRequest(RqModel):
+    current_password: SensitivePasswordField
+    new_password: SensitivePasswordField
 
 
 class UserData(RsModel):

@@ -1,20 +1,23 @@
 from uuid import UUID
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.db.session import DatabaseSessionManager
 from app.exceptions import (
     EmailAlreadyExistsError,
+    InvalidCurrentPasswordError,
     PermissionDeniedError,
     SelfAdministrationError,
     UserNotFoundError,
 )
 from app.repositories.user import (
     DuplicateUserRecordError,
+    UserPasswordChange,
     UserRecordCreate,
     UserRecordReplacement,
     UserRepository,
 )
 from app.services.user_contracts import (
+    ChangeCurrentUserPasswordCommand,
     CreateUserCommand,
     RegisterUserCommand,
     UpdateCurrentUserCommand,
@@ -104,7 +107,6 @@ class UserService:
         actor: UserResult,
         command: UpdateCurrentUserCommand,
     ) -> UserResult:
-        hashed_password = hash_password(command.password) if command.password is not None else None
         with self.manager.session_scope() as session:
             repository = UserRepository(session)
             user = repository.get_by_id(actor.id)
@@ -113,7 +115,7 @@ class UserService:
             record = UserRecordReplacement(
                 email=command.email.strip().casefold(),
                 full_name=command.full_name,
-                hashed_password=hashed_password,
+                hashed_password=None,
                 is_active=user.is_active,
                 is_superuser=user.is_superuser,
             )
@@ -124,6 +126,25 @@ class UserService:
                 session.rollback()
                 raise EmailAlreadyExistsError from None
             return UserResult.from_model(user)
+
+    def change_current_user_password(
+        self,
+        *,
+        actor: UserResult,
+        command: ChangeCurrentUserPasswordCommand,
+    ) -> None:
+        with self.manager.session_scope() as session:
+            repository = UserRepository(session)
+            user = repository.get_by_id_for_update(actor.id)
+            if user is None:
+                raise UserNotFoundError
+            if not verify_password(command.current_password, user.hashed_password):
+                raise InvalidCurrentPasswordError
+            repository.change_password(
+                user=user,
+                data=UserPasswordChange(hashed_password=hash_password(command.new_password)),
+            )
+            session.commit()
 
     def update_user_as_admin(
         self,

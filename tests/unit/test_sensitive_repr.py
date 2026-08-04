@@ -1,10 +1,10 @@
 import secrets
 
-from app.repositories.user import UserRecordCreate
+from app.repositories.user import UserPasswordChange, UserRecordCreate
 from app.schemas.auth import AccessTokenResponse
-from app.schemas.user import UserRegisterRequest
+from app.schemas.user import UserPasswordChangeRequest, UserRegisterRequest
 from app.services.auth import AccessTokenResult
-from app.services.user_contracts import RegisterUserCommand
+from app.services.user_contracts import ChangeCurrentUserPasswordCommand, RegisterUserCommand
 
 
 def test_sensitive_values_do_not_appear_in_contract_reprs() -> None:
@@ -14,6 +14,14 @@ def test_sensitive_values_do_not_appear_in_contract_reprs() -> None:
             UserRegisterRequest(
                 email="repr-check@example.com",
                 password=sensitive_value,
+            )
+        ),
+        repr(
+            UserPasswordChangeRequest.model_validate(
+                {
+                    "currentPassword": sensitive_value,
+                    "newPassword": sensitive_value,
+                }
             )
         ),
         repr(
@@ -38,6 +46,13 @@ def test_sensitive_values_do_not_appear_in_contract_reprs() -> None:
                 is_superuser=False,
             )
         ),
+        repr(
+            ChangeCurrentUserPasswordCommand(
+                current_password=sensitive_value,
+                new_password=sensitive_value,
+            )
+        ),
+        repr(UserPasswordChange(hashed_password=sensitive_value)),
         repr(AccessTokenResult(access_token=sensitive_value, expires_in=1800)),
     )
 
