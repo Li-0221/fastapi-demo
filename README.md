@@ -26,7 +26,6 @@ fastapi-demo/
 ├── src/app/
 │   ├── api/
 │   │   ├── routes/                # HTTP 参数、依赖注入、响应组装
-│   │   ├── openapi.py             # OpenAPI 错误响应 schema 装配
 │   │   └── router.py              # API 子路由汇总
 │   ├── core/                      # 配置和密码/JWT 基础能力
 │   ├── db/                        # Session manager 和 ORM metadata

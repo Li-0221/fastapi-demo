@@ -1,11 +1,11 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.openapi import ERROR_RESPONSES
 from app.api.router import api_router
 from app.core.config import get_app_settings, get_database_settings
 from app.dependencies.database import get_database_manager
@@ -17,6 +17,23 @@ from app.exception_handlers import (
 )
 from app.exceptions import AppError
 from app.middleware import RequestIdMiddleware
+from app.schemas.common import ErrorResponse
+
+# tripguru-ast: ignore[TG-DS001] - FastAPI owns the OpenAPI responses mapping protocol
+ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
+    401: {"model": ErrorResponse},
+    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
+    403: {"model": ErrorResponse},
+    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
+    404: {"model": ErrorResponse},
+    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
+    409: {"model": ErrorResponse},
+    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
+    422: {"model": ErrorResponse},
+    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
+    500: {"model": ErrorResponse},
+}
 
 
 @asynccontextmanager
