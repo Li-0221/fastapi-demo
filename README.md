@@ -1,10 +1,20 @@
 # FastAPI 中小型项目参考模板
 
-这是一个供初学者阅读、运行和继续扩展的后端模板。它参考了
-[`full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template/tree/master/backend/app)
-的应用入口、配置、认证和测试思路，但把中小型项目最容易混乱的职责拆开了。
-实现同时遵循仓库内的 [`AGENTS.md`](AGENTS.md)，重点落实 Session 生命周期、事务 owner、
-typed contract 和按真实复杂度增加抽象的原则。
+## 项目定位
+
+本项目是一个**面向初学者、可直接作为中小型后台项目起点的 FastAPI starter**。
+它希望在“容易读懂”和“能承担真实项目”之间取得平衡：
+
+- **对新手友好**：调用链保持清晰，优先使用 Router、Service、Repository 和 typed schema 组成的直接结构。
+- **可用于真实后台**：保留 PostgreSQL、Alembic、认证与授权、事务、稳定错误契约、安全日志边界和分层测试等生产基础能力。
+- **简单优先，但不追求极端最简**：不为一比一字段复制提前增加层级，也不会为减少文件而删除真正保护权限、数据完整性和事务语义的结构。
+- **按复杂度演进**：Command、Result、Presenter、Unit of Work 等都不被禁止；当多入口契约、PATCH 三态、聚合映射、角色视图或跨 Repository 事务等真实需求出现时再启用。
+
+它不是只演示路由和 CRUD 的一次性 demo，也不是预先搭好 DDD、CQRS、微服务和各种抽象层的大型企业脚手架。
+目标是让初学者现在能顺着代码学会正确边界，也让项目未来能够自然扩展到中型后台。
+
+实现参考了 [`full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template/tree/master/backend/app)
+的应用入口、配置、认证和测试思路；仓库工程约束见 [`AGENTS.md`](AGENTS.md)。
 
 模板已包含：
 
@@ -57,25 +67,9 @@ fastapi-demo/
 └── uv.lock                        # 锁定后的依赖版本
 ```
 
-一次登录请求的调用方向是：
-
-```text
-HTTP form -> Router -> AuthService -> short Session -> Repository -> Database
-                |          |              |
-                |          |              +-> 查询和 flush，不 commit
-                |          +-> 认证、业务异常、事务 owner、typed Result
-                +-> ApiResponse / OAuth2 标准响应
-```
-
-这个方向很重要：FastAPI dependency 只注入可复用的 session manager，不通过 `yield`
-持有业务 Session；Service 的每个公开用例创建并关闭短 Session，是唯一的 commit/rollback
-owner；Repository 不判断管理员权限，也不偷偷 commit。Service 在关闭
-Session 前返回安全的 typed Data/Result，Router 只负责响应组装。应用 lifespan
-拥有数据库 Engine，并在进程关闭时释放连接池。
-
-当一个用例出现多入口、不同信任级别或独立演进的输入时，可以增加 Command；
-当内部 Result 与公开 Data 需要改名、计算、聚合、角色视图或版本差异时，可以增加
-Presenter/转换函数。它们都是有用的扩展工具，但不为同名字段子集提前搭层。
+核心调用方向是 `Router -> Service -> Repository -> PostgreSQL`。Service 拥有短 Session、
+事务和业务授权，Repository 只负责持久化。完整请求链路及 Command/Presenter 的启用条件见
+[`docs/request-lifecycle.md`](docs/request-lifecycle.md) 和 [`AGENTS.md`](AGENTS.md)。
 
 ## 2. 本地启动（Docker PostgreSQL）
 
@@ -108,6 +102,15 @@ uv run uvicorn app.main:app --reload
 - Swagger UI: <http://127.0.0.1:8000/docs>
 - ReDoc: <http://127.0.0.1:8000/redoc>
 - 健康检查: <http://127.0.0.1:8000/api/v1/health>
+
+需要验证 API 镜像时运行：
+
+```bash
+docker build -t fastapi-demo .
+```
+
+生产环境应把 migration 作为独立部署步骤，并从 secret manager 注入配置，不要让每个 API
+replica 在启动时竞争执行 migration。
 
 ## 3. 创建第一个管理员
 
@@ -146,20 +149,7 @@ Swagger 和通用 OAuth2 客户端无法识别。
 }
 ```
 
-主要端点：
-
-| 方法 | 路径 | 权限 | 用途 |
-| --- | --- | --- | --- |
-| `POST` | `/api/v1/auth/register` | 公开 | 注册普通用户 |
-| `POST` | `/api/v1/auth/login/access-token` | 公开 | 登录并签发 access token |
-| `GET` | `/api/v1/users/me` | 登录 | 查看自己 |
-| `PUT` | `/api/v1/users/me` | 登录 | 完整更新自己的邮箱和姓名 |
-| `PUT` | `/api/v1/users/me/password` | 登录 | 校验当前密码后修改密码 |
-| `POST` | `/api/v1/users` | 管理员 | 创建用户 |
-| `GET` | `/api/v1/users` | 管理员 | 稳定排序的分页列表 |
-| `GET` | `/api/v1/users/{userId}` | 管理员 | 用户详情 |
-| `PUT` | `/api/v1/users/{userId}` | 管理员 | 完整更新用户的可管理字段，可选修改密码 |
-| `DELETE` | `/api/v1/users/{userId}` | 管理员 | 删除用户 |
+完整端点、参数和响应字段以运行时 Swagger/ReDoc 为准。
 
 PUT 要求完整提供当前资源可编辑的字段；`fullName: null` 表示清空姓名，不可为空的字段
 （例如 `email`、`isActive`）缺失或收到 `null` 会在 request schema 边界返回 `422`。
@@ -169,26 +159,10 @@ PUT 要求完整提供当前资源可编辑的字段；`fullName: null` 表示�
 生产部署必须在网关或反向代理为公开的注册、登录端点设置请求体上限和按来源限流。
 限流通常需要共享存储与可信客户端地址，不属于这个单进程教学模板的应用内能力。
 
-## 5. PostgreSQL 容器
+JWT access token 本身无法主动撤销。当前实现每次请求都会重新查询用户，因此删除或禁用用户
+会立即阻止旧 token；修改密码只影响后续登录，已经签发的 token 仍会在过期前有效。
 
-Compose 只管理本地 PostgreSQL，不在数据库容器启动时隐式执行 migration：
-
-```bash
-docker compose up -d --wait db
-docker compose ps
-docker compose logs db
-```
-
-本地验证 API 镜像：
-
-```bash
-docker build -t fastapi-demo .
-```
-
-生产环境应把 migration 作为独立部署步骤，并从 secret manager 注入配置，不要让每个 API
-replica 在启动时竞争执行 migration。
-
-## 6. 质量检查
+## 5. 质量检查
 
 ```bash
 uv run ruff format --check .
@@ -210,17 +184,3 @@ uv run alembic upgrade head
 ```
 
 不要修改已经在共享环境执行过的 migration；应新增 forward revision。
-
-## 7. 下一步扩展建议
-
-先按业务需要逐项增加，而不是提前堆基础设施：
-
-1. refresh token 与服务端撤销记录
-2. 邮箱验证、找回密码和发送适配器
-3. RBAC role/permission 表，替换单一 `isSuperuser`
-4. 软删除与审计日志
-5. 结构化日志、指标和 tracing
-
-JWT access token 本身无法主动撤销。当前实现每次请求都会重新查询用户，因此删除或禁用用户
-会立即阻止旧 token；修改密码只影响后续登录，已经签发的 token 仍会在过期前有效。若要支持
-“登出当前设备”或“修改密码后退出其他设备”，需要增加 token id/version 和撤销存储。
