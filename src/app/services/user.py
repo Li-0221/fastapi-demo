@@ -16,39 +16,44 @@ from app.repositories.user import (
     UserRecordReplacement,
     UserRepository,
 )
-from app.services.user_contracts import (
-    ChangeCurrentUserPasswordCommand,
-    CreateUserCommand,
-    RegisterUserCommand,
-    UpdateCurrentUserCommand,
-    UpdateUserCommand,
-    UserPageResult,
-    UserResult,
-)
+from app.schemas.common import PageData
+from app.schemas.user import UserData
 
 
 class UserService:
     def __init__(self, *, manager: DatabaseSessionManager) -> None:
         self.manager = manager
 
-    def register_user(self, command: RegisterUserCommand) -> UserResult:
+    def register_user(
+        self,
+        *,
+        email: str,
+        full_name: str | None,
+        password: str,
+    ) -> UserData:
         return self.create_user(
-            CreateUserCommand(
-                email=command.email,
-                full_name=command.full_name,
-                password=command.password,
-                is_active=True,
-                is_superuser=False,
-            )
+            email=email,
+            full_name=full_name,
+            password=password,
+            is_active=True,
+            is_superuser=False,
         )
 
-    def create_user(self, command: CreateUserCommand) -> UserResult:
+    def create_user(
+        self,
+        *,
+        email: str,
+        full_name: str | None,
+        password: str,
+        is_active: bool,
+        is_superuser: bool,
+    ) -> UserData:
         record = UserRecordCreate(
-            email=command.email.strip().casefold(),
-            full_name=command.full_name,
-            hashed_password=hash_password(command.password),
-            is_active=command.is_active,
-            is_superuser=command.is_superuser,
+            email=email.strip().casefold(),
+            full_name=full_name,
+            hashed_password=hash_password(password),
+            is_active=is_active,
+            is_superuser=is_superuser,
         )
         with self.manager.session_scope() as session:
             repository = UserRepository(session)
@@ -58,35 +63,45 @@ class UserService:
             except DuplicateUserRecordError:
                 session.rollback()
                 raise EmailAlreadyExistsError from None
-            return UserResult.from_model(user)
+            return UserData.model_validate(user, from_attributes=True)
 
     # 管理用例由 Service 再次校验 actor, 不能只依赖 Router 是否隐藏或暴露入口。
     def create_user_as_admin(
         self,
         *,
-        actor: UserResult,
-        command: CreateUserCommand,
-    ) -> UserResult:
+        actor: UserData,
+        email: str,
+        full_name: str | None,
+        password: str,
+        is_active: bool,
+        is_superuser: bool,
+    ) -> UserData:
         if not actor.is_superuser:
             raise PermissionDeniedError
-        return self.create_user(command)
+        return self.create_user(
+            email=email,
+            full_name=full_name,
+            password=password,
+            is_active=is_active,
+            is_superuser=is_superuser,
+        )
 
-    def get_user(self, *, actor: UserResult, user_id: UUID) -> UserResult:
+    def get_user(self, *, actor: UserData, user_id: UUID) -> UserData:
         if not actor.is_superuser:
             raise PermissionDeniedError
         with self.manager.session_scope() as session:
             user = UserRepository(session).get_by_id(user_id)
             if user is None:
                 raise UserNotFoundError
-            return UserResult.from_model(user)
+            return UserData.model_validate(user, from_attributes=True)
 
     def list_users(
         self,
         *,
-        actor: UserResult,
+        actor: UserData,
         page: int,
         page_size: int,
-    ) -> UserPageResult:
+    ) -> PageData[UserData]:
         if not actor.is_superuser:
             raise PermissionDeniedError
         with self.manager.session_scope() as session:
@@ -94,8 +109,8 @@ class UserService:
                 offset=(page - 1) * page_size,
                 limit=page_size,
             )
-            return UserPageResult(
-                items=[UserResult.from_model(user) for user in items],
+            return PageData(
+                items=[UserData.model_validate(user, from_attributes=True) for user in items],
                 total=total,
                 page=page,
                 page_size=page_size,
@@ -104,17 +119,18 @@ class UserService:
     def update_current_user(
         self,
         *,
-        actor: UserResult,
-        command: UpdateCurrentUserCommand,
-    ) -> UserResult:
+        actor: UserData,
+        email: str,
+        full_name: str | None,
+    ) -> UserData:
         with self.manager.session_scope() as session:
             repository = UserRepository(session)
             user = repository.get_by_id(actor.id)
             if user is None:
                 raise UserNotFoundError
             record = UserRecordReplacement(
-                email=command.email.strip().casefold(),
-                full_name=command.full_name,
+                email=email.strip().casefold(),
+                full_name=full_name,
                 hashed_password=None,
                 is_active=user.is_active,
                 is_superuser=user.is_superuser,
@@ -125,46 +141,51 @@ class UserService:
             except DuplicateUserRecordError:
                 session.rollback()
                 raise EmailAlreadyExistsError from None
-            return UserResult.from_model(user)
+            return UserData.model_validate(user, from_attributes=True)
 
     def change_current_user_password(
         self,
         *,
-        actor: UserResult,
-        command: ChangeCurrentUserPasswordCommand,
+        actor: UserData,
+        current_password: str,
+        new_password: str,
     ) -> None:
         with self.manager.session_scope() as session:
             repository = UserRepository(session)
             user = repository.get_by_id_for_update(actor.id)
             if user is None:
                 raise UserNotFoundError
-            if not verify_password(command.current_password, user.hashed_password):
+            if not verify_password(current_password, user.hashed_password):
                 raise InvalidCurrentPasswordError
             repository.change_password(
                 user=user,
-                data=UserPasswordChange(hashed_password=hash_password(command.new_password)),
+                data=UserPasswordChange(hashed_password=hash_password(new_password)),
             )
             session.commit()
 
     def update_user_as_admin(
         self,
         *,
-        actor: UserResult,
+        actor: UserData,
         user_id: UUID,
-        command: UpdateUserCommand,
-    ) -> UserResult:
+        email: str,
+        full_name: str | None,
+        password: str | None,
+        is_active: bool,
+        is_superuser: bool,
+    ) -> UserData:
         if not actor.is_superuser:
             raise PermissionDeniedError
         if actor.id == user_id:
             raise SelfAdministrationError
 
-        hashed_password = hash_password(command.password) if command.password is not None else None
+        hashed_password = hash_password(password) if password is not None else None
         record = UserRecordReplacement(
-            email=command.email.strip().casefold(),
-            full_name=command.full_name,
+            email=email.strip().casefold(),
+            full_name=full_name,
             hashed_password=hashed_password,
-            is_active=command.is_active,
-            is_superuser=command.is_superuser,
+            is_active=is_active,
+            is_superuser=is_superuser,
         )
         with self.manager.session_scope() as session:
             repository = UserRepository(session)
@@ -177,12 +198,12 @@ class UserService:
             except DuplicateUserRecordError:
                 session.rollback()
                 raise EmailAlreadyExistsError from None
-            return UserResult.from_model(user)
+            return UserData.model_validate(user, from_attributes=True)
 
     def delete_user(
         self,
         *,
-        actor: UserResult,
+        actor: UserData,
         user_id: UUID,
     ) -> None:
         # 删除用户只属于管理员用例, 并且管理员不能通过管理端点删除自己。

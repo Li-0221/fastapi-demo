@@ -5,6 +5,7 @@
 - 本文件适用于本仓库全部目录。开始修改前先阅读本文件、`README.md`、相关代码和测试。
 - 以当前代码、`pyproject.toml`、`uv.lock`、Alembic revision 和测试约束的行为为准，不从其他仓库机械复制目录、基类或事务模式。
 - 这是面向中小型项目的教学模板。新增抽象必须解决真实的职责、生命周期或复用问题，不能只为了让目录看起来更完整。
+- 简单优先不等于追求最少文件。Service、Repository、typed contract、事务、权限和数据库约束等能保护真实语义的结构必须保留，使项目可从小型平滑扩展到中型。
 - 不在无关需求中顺手迁移全部旧代码或统一全仓风格；只在当前修改涉及的链路按本文件收敛。
 - 修改前检查 Git 状态，保留用户已有改动；只暂存当前任务涉及的文件。
 
@@ -19,6 +20,9 @@
 ## 抽象与依赖原则
 
 - 复用仓库现有类型和边界；只有 trust、owner、语义、生命周期或独立版本轴不同时才新增转换层。
+- Command 和 Presenter 都是复杂用例的有效工具，不禁止使用，也不是默认必备层。简单同构链路中删除它们不会丢失 trust、owner、语义、生命周期、公开字段白名单或独立演进能力时，应当省略对应抽象。
+- HTTP/CLI/worker 等多入口需要共享独立输入契约，或存在不同角色/信任级别、PATCH 三态、入站 shape 与用例语义不同、参数组需要独立演进时，应当启用 Service-owned Command。仅有多个调用方但关键字参数仍清晰，不足以单独证明需要 Command。
+- 内部 Result/ORM/provider facts 与公开 Data 需要改名、计算、聚合重组、角色视图、API 版本差异或多处共享转换时，应当启用 Presenter/转换函数做显式 allowlist 映射。仅是同名字段子集时，可由目标 Data schema 在 Service 内直接校验收窄，但必须用 API contract test 断言精确公开字段且不暴露敏感数据。
 - 无状态转换优先使用函数；只有存在状态、资源生命周期、多个真实实现或第三方隔离时才新增 class、`Protocol` 或 wrapper。
 - `Protocol` 只用于真实可替换的 repository、client、clock 或 Unit of Work 边界，不为普通函数机械增加接口。
 - helper、base class 或通用模块必须实际降低重复或认知成本，不能为了表面 DRY 把局部语义上移为全局抽象。
@@ -75,7 +79,7 @@ uv run alembic check
 
 ### Router
 
-- 只负责 HTTP typed binding、依赖注入、调用 Service、调用 Presenter，以及组装 HTTP response。
+- 只负责 HTTP typed binding、依赖注入、调用 Service、在必要时调用 Presenter/转换函数，以及组装 HTTP response。
 - 禁止直接访问 ORM、Session 或 Repository，禁止拥有事务、权限推导和业务状态变更。
 - 普通 JSON 成功响应在 Router 组装 `ApiResponse[T]`；OAuth2 token 与 `204 No Content` 保持协议原始形状。
 
@@ -85,7 +89,7 @@ uv run alembic check
 - 本项目的 FastAPI dependency 只注入 `DatabaseSessionManager`；每个公开 Service 用例创建并关闭自己的短 Session。
 - FastAPI dependency 禁止通过 `yield` 持有业务 Session；Session 必须由 Service 的公开用例或显式上层事务 owner 创建和关闭。
 - Service 是唯一 commit/rollback owner。Repository 不得隐藏 commit，外部 IO 不得放在数据库事务中。
-- Service 返回 ORM、typed Result/Facts 或简单业务数据，禁止返回 FastAPI `Response` 或 HTTP envelope。
+- Service 必须在关闭 Session 前返回不含敏感内部字段的 response Data、typed Result/Facts 或简单业务数据；禁止把 ORM、FastAPI `Response` 或 HTTP envelope 返回给 Router。
 - 如果一个上层用例未来需要跨多个 Service 保持原子事务，应将必需 Session 显式传给事务内协作者；协作者不得再次开 Session 或 commit。
 - 高风险外部副作用不能与数据库写入组成不可恢复的假事务；应先持久化可恢复 intent，再调用外部系统，最后记录成功或失败事实。
 
@@ -99,17 +103,19 @@ uv run alembic check
 
 ### Contract 转换与 Presenter
 
-- Request 到 Command、ORM 到 Result 的转换通过目标 contract 的 named constructor 完成，保留 PUT 的完整字段语义。
+- 简单用例由 Router 把已校验字段作为明确关键字参数传给 Service，不为一比一复制新增 Command。当 trust、owner、语义、生命周期或演进方向不同，或参数组已形成独立概念时，应当改用 Service-owned Command。
+- Router 禁止把 request 先 dump 成裸 dict 再传递；Service 也禁止把 request 或裸 dict 继续下传给 Repository。
+- 需要 Request 到 Command 或 ORM 到 Result 的转换时，通过目标 contract 的 named constructor 完成，并保留 PUT 的完整字段语义。
 - 不为单一字段复制链路新增独立 `mappers/` 目录或无状态 Mapper class；只有存在多个真实来源或 adapter 时才建立独立转换模块。
-- Presenter 通过 allowlist 把 ORM/Result 转换为公开 Data schema。
-- Contract 转换与 Presenter 只能转换字段，禁止访问数据库、判断权限、改变状态或提交事务。
+- ORM/Result 到公开 Data 只是同名字段子集时，Service 可以在 Session 关闭前用目标 Data schema 直接校验收窄；涉及改名、计算、聚合、角色视图、版本差异或共享转换时，必须通过 Presenter/转换函数做显式 allowlist 映射。若 Service 已返回与公开 Data 同构同义的 typed Data，Router 可以直接组装 response。
+- Presenter/转换函数只能转换字段，禁止访问数据库、判断权限、改变状态或提交事务。无状态且只有一个实现时优先使用语义明确的模块级函数，不为形式统一新增 Presenter class。
 - 禁止整体 dump ORM 或宽内部模型作为公开响应，尤其不能暴露 `hashed_password`。
 
 ## API 契约
 
-- Request、内部 Command/Result、ORM 和 Response Data 分别拥有自己的类型；owner 或语义不同时必须拆型。
+- Request、ORM 和 Response Data 不得因为方便而混为一个宽型。内部 Command/Result 在 owner、trust、语义、生命周期或演进方向不同时必须拆出；语义完全一致且已排除敏感字段的 typed Data 可以由 Service 和 Router 共用。
 - 入站 request schema 继承项目的 `RqModel`，统一获得 camelCase alias 和 `extra="forbid"`；公开 response Data 继承 `RsModel`。
-- 内部 Command/Result 使用 dataclass 或独立内部模型，不继承 `RqModel`/`RsModel`，避免 wire alias、extra 和序列化策略进入业务层。
+- 需要独立 Command/Result 时，使用 dataclass 或独立内部模型，不继承 `RqModel`/`RsModel`，避免 wire alias、extra 和序列化策略进入业务层。
 - 普通 API wire 字段使用 camelCase；Python 内部保持 snake_case。
 - OAuth2 token 响应必须保留标准的 `access_token`、`token_type`、`expires_in`。
 - 普通成功响应使用 `{ "data": ... }`；错误响应使用统一的 `{ "error": ... }`；`204` 不返回 JSON body。
@@ -119,14 +125,14 @@ uv run alembic check
 - 使用 Pydantic v2 API；禁止新增 `.dict()` 和未经重新验证的 `model_copy(update=...)`。
 - `Optional` 只表示当前 contract 中真实可达的缺失状态；应在第一个拥有完整事实的 schema/Service 边界收窄，不能沿调用链重复判空或补默认值。
 - 字段约束、alias 和 serializer metadata 使用 `Annotated[T, Field(...)]`；真实可变默认值使用 `default_factory`。
-- `model_dump()` 只用于真实 JSON、持久化或 typed update 边界。HTTP JSON 序列化按 contract 显式选择 `mode="json"`、`by_alias` 和 `exclude_none`。
+- `model_dump()` 只用于真实 JSON、持久化或 typed update 边界。普通 FastAPI response model 交给框架序列化；只有手动构造 HTTP JSON 时才按 contract 显式选择 `mode="json"`、`by_alias` 和 `exclude_none`。
 - 业务层之间传 Pydantic model、dataclass 或其他 owned typed structure；裸 dict 只能停留在真实 JSON/HTTP/JSONB 边界。
 
 ## PUT、PATCH 与写入模型
 
 - 新增 PUT 默认表示完整资源替换，使用语义明确的 `FooPut` request；完整资源字段必须提供，可清空字段也必须显式传 `null`。
 - 现有用户更新接口使用 PUT 表达完整替换；请求必须提供对应资源全部可编辑字段，允许清空的字段也必须显式传 `null`。
-- 本仓库的用户 update 必须保持为 PUT，不得改回 PATCH 后将 request `model_dump()` 为带字符串 key 的 dict 再更新 ORM。PUT 本身不会自动消除字符串 key；真正的不变量是 `FooPut` request、typed Command、typed `UserRecordReplacement` 和 Repository 显式 ORM 属性赋值组成的完整 typed 链路。
+- 本仓库的用户 update 必须保持为 PUT，不得改回 PATCH 后将 request `model_dump()` 为带字符串 key 的 dict 再更新 ORM。PUT 本身不会自动消除字符串 key；真正的不变量是 `FooPut` request、必要时的 typed Command、typed `UserRecordReplacement` 和 Repository 显式 ORM 属性赋值组成的完整 typed 链路。
 - 密码等无法从详情响应回读的 write-only 字段可以在 PUT 中保持可选；省略或 `null` 表示不轮换该凭据，不影响其他字段的完整替换语义。
 - ORM 更新优先显式字段赋值，使类型检查能够发现字段拼写和归属错误；禁止 request dump 后通过字符串 key 动态 `setattr`。
 - 不新增全局通用 `UpdateSchema`。确需复用更新 payload 时，由目标 Repository 拥有窄 typed schema，并明确 omitted/null/value 语义。
@@ -141,7 +147,7 @@ uv run alembic check
 
 ## 认证与授权
 
-- 密码只保存 Argon2 哈希；密码、密码哈希、JWT 和 Secret 不得进入响应、日志、测试快照或提交内容。
+- 密码只保存 Argon2 哈希；密码、密码哈希和 Secret 不得进入响应、日志、测试快照或提交内容。JWT 只能出现在认证协议明确要求的 access-token 响应中，不得进入日志、快照或其他响应。
 - 当前用户身份只能来自验证后的 Bearer token，不能相信 body、query 或客户端自报 header 中的 user/role。
 - 缺失、无效或已失效认证返回 `401` 并保留 `WWW-Authenticate: Bearer`；身份有效但权限不足返回 `403`。
 - 管理员授权在拥有用户事实的服务端边界验证，不能只依赖前端隐藏入口。
@@ -191,7 +197,7 @@ uv run alembic check
 - 权限测试同时覆盖允许与越权；分页覆盖稳定顺序、空结果和边界参数。
 - 修复 bug 必须增加一个修复前会失败的最小回归测试。
 - 测试独立于执行顺序，不依赖其他测试遗留的数据；测试凭据使用运行时随机值，不写死真实凭据。
-- Schema/validator/serializer、contract factory、Presenter 和纯业务规则使用快速单元测试，覆盖边界值、alias、omitted/null/value 与失败路径。
+- Schema/validator/serializer、实际存在的 contract factory/Presenter 和纯业务规则使用快速单元测试，覆盖边界值、alias、omitted/null/value 与失败路径。
 - 不为通过测试删除断言、放宽公开 contract 或吞掉错误；测试替身只实现调用方真实依赖的 contract。
 
 ## 文件与凭据卫生
@@ -203,7 +209,7 @@ uv run alembic check
 
 ## 完成检查
 
-- [ ] Router、Service、Repository、contract factory 与 Presenter 职责未串层。
+- [ ] Router、Service、Repository 职责未串层；Command、contract factory 与 Presenter 只在有真实边界需要时存在。
 - [ ] 业务规则由 schema/Service 拥有，数据库只承担所有 writer 必须遵守的不变量。
 - [ ] Settings/env 有真实消费者，新增或删除时同步更新配置、测试和文档。
 - [ ] Session 和 transaction owner 唯一，没有隐藏 commit 或长事务。
@@ -213,5 +219,5 @@ uv run alembic check
 - [ ] 认证身份来自可信 token，越权和失效路径已测试。
 - [ ] 模型变更新增了 migration，并在 PostgreSQL 上验证。
 - [ ] 时间使用 timezone-aware UTC 语义；新增 worker 时遵守短 Session、可测试 tick 和幂等规则。
-- [ ] Ruff、format、mypy、pytest、pre-commit 和适用的 Alembic 检查已实际运行。
+- [ ] 已运行本次改动适用的最窄检查，并按风险扩大到 Ruff、format、mypy、pytest、pre-commit 或 Alembic；只报告实际运行的结果。
 - [ ] 暂存区不含 Secret、`.env`、coverage、数据库文件、缓存或无关改动。

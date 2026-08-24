@@ -9,15 +9,15 @@ Vue / 浏览器
    ↓ HTTP Request
 FastAPI + RequestIdMiddleware
    ↓ 路由匹配、参数校验、依赖与认证
-Router（构造 Command、调用 Service）
+Router（传入已校验字段、调用 Service）
    ↓
 Service（业务规则、授权、短 Session 和事务）
    ↓
 Repository ↔ PostgreSQL
    ↓
-Service 返回 Result / Facts，并关闭 Session
+Service 返回安全的 typed Data / Result / Facts，并关闭 Session
    ↓
-Presenter → Response Data → ApiResponse
+Router 组装 ApiResponse
    ↓
 FastAPI 序列化；Middleware 添加 X-Request-ID
    ↓ HTTP Response
@@ -41,7 +41,7 @@ UserRepository（按 token subject 查询用户）
    ↓
 检查用户存在且处于 active 状态
    ↓
-UserResult（可信 CurrentUser / actor）
+UserData（可信 CurrentUser / actor）
    ↓
 Router Handler → Service
 ```
@@ -55,31 +55,33 @@ Router Handler → Service
 | Middleware | request ID 等所有请求共享的 HTTP 横切能力 | 业务授权、数据库事务 |
 | Dependency | 参数解析、认证、装配 Manager 和 Service | 资源授权、业务状态变更 |
 | Request Schema | HTTP 入站 shape、camelCase alias 和输入校验 | 数据库写入、业务状态判断 |
-| Router | 调用 Service、Presenter，组装 HTTP response | ORM 查询、事务和业务规则 |
-| Command | 表达写用例的内部输入 | HTTP alias、response 序列化 |
+| Router | 调用 Service，组装 HTTP response | ORM 查询、事务和业务规则 |
+| Service 输入 | 简单用例使用明确关键字参数；复杂用例可使用 Command | HTTP alias、裸 dict |
 | Service | 用例编排、业务校验、授权、Session 和 commit/rollback | HTTP envelope、公开字段展示 |
 | Repository | 查询、排序、锁、flush 和持久化细节 | 角色判断、HTTP response |
-| Result / Facts | 表达 Service 已经确认的内部结果 | 暴露 ORM 生命周期或 HTTP 策略 |
-| Presenter | 将内部结果 allowlist 映射为公开 Data | 数据库访问、权限判断和状态变更 |
+| Data / Result / Facts | 在 Session 关闭前收窄 ORM，表达安全输出或内部事实 | 暴露 ORM 生命周期 |
+| Presenter / 转换函数 | 内部结果与公开 Data 不同时做 allowlist 映射 | 数据库访问、权限判断和状态变更 |
 | Response Schema | 定义公开字段、alias 和 envelope | 反向承载内部或数据库模型 |
 
-具体实现可从 [`api/routes/users.py`](../src/app/api/routes/users.py) 依次追踪到 [`services/user.py`](../src/app/services/user.py)、[`repositories/user.py`](../src/app/repositories/user.py) 和 [`presenters/user.py`](../src/app/presenters/user.py)。
+具体实现可从 [`api/routes/users.py`](../src/app/api/routes/users.py) 依次追踪到 [`services/user.py`](../src/app/services/user.py) 和 [`repositories/user.py`](../src/app/repositories/user.py)。
 
-## Request Schema 与 Command
+## Request Schema 与 Service 输入
 
-Request Schema 回答“客户端按 HTTP contract 提交了什么”，Command 回答“系统要执行哪个业务动作，以及该动作需要哪些内部输入”。两者只有在 owner、语义或生命周期不同的时候才需要拆开。
+Request Schema 回答“客户端按 HTTP contract 提交了什么”。当用例输入与它一致时，Router 直接把已校验字段作为关键字参数传给 Service，不再复制一个同构 Command。
 
 ```text
 HTTP JSON
    ↓
 UserCreateRequest（Pydantic、camelCase、输入校验）
    ↓
-CreateUserCommand（创建用户用例的内部输入）
+UserService.create_user（明确关键字参数）
    ↓
 UserRecordCreate（规范化邮箱、密码哈希等持久化输入）
 ```
 
-Command 不是 FastAPI 的要求，也不代表项目实现了完整 CQRS。简单查询可以像用户列表一样直接向 Service 传递已经校验的 `page` 和 `page_size`。当前 `CreateUserCommand` 同时被 HTTP Router 和创建管理员的 CLI 脚本调用，因此它提供了真实的非 HTTP 业务入口。内部 contract 定义在 [`services/user_contracts.py`](../src/app/services/user_contracts.py)。
+Command 不是 FastAPI 的要求，也不代表项目实现了完整 CQRS。它在 HTTP/CLI/worker 多入口、不同信任级别、PATCH 三态或参数组需要独立演进时很有价值，此时应由 Service 拥有 Command。当前用户写入只需要明确的 typed 参数；创建超级管理员的 CLI 与 Router 复用同一个 Service 方法。
+
+认证链路仍保留 `LoginUserFacts` 和 `AccessTokenResult`，因为它们分别拥有密码哈希的短生命周期以及 OAuth2 token 结果语义，并不是对 HTTP schema 的一比一复制。
 
 ## 异常路径
 
@@ -103,6 +105,6 @@ Vue / 浏览器
 
 - 公开注册不解析 `CurrentUser`，其余写入链路相同。
 - OAuth2 登录接收 form data，并返回标准 `access_token`、`token_type`、`expires_in`，不使用普通 `ApiResponse` envelope。
-- `204 No Content` 直接返回空 `Response`，不经过 Presenter 或 JSON envelope。
+- `204 No Content` 直接返回空 `Response`，不经过 Data 转换或 JSON envelope。
 - 读取接口没有写事务；Service 仍拥有短 Session 的创建和关闭。
 - 应用 lifespan 拥有数据库 Engine，并在进程关闭时释放连接池；它不属于单次请求链路。

@@ -10,7 +10,7 @@ from app.core.security import (
 from app.db.session import DatabaseSessionManager
 from app.exceptions import AuthenticationRequiredError, InactiveUserError, InvalidCredentialsError
 from app.repositories.user import UserRepository
-from app.services.user_contracts import UserResult
+from app.schemas.user import UserData
 
 MAX_LOGIN_EMAIL_LENGTH = 255
 MAX_LOGIN_PASSWORD_LENGTH = 128
@@ -28,7 +28,7 @@ class AccessTokenResult:
 
 @dataclass(frozen=True, slots=True)
 class LoginUserFacts:
-    user: UserResult
+    user: UserData
     # 登录校验需要真实哈希, 但不应让 dataclass repr 带出它。
     hashed_password: str = field(repr=False)
 
@@ -62,7 +62,7 @@ class AuthService:
             user = UserRepository(session).get_by_email(normalized_email)
             if user is not None:
                 facts = LoginUserFacts(
-                    user=UserResult.from_model(user),
+                    user=UserData.model_validate(user, from_attributes=True),
                     hashed_password=user.hashed_password,
                 )
 
@@ -84,7 +84,7 @@ class AuthService:
             expires_in=self.access_token_expire_minutes * 60,
         )
 
-    def authenticate_access_token(self, token: str) -> UserResult:
+    def authenticate_access_token(self, token: str) -> UserData:
         claims = decode_access_token(token=token, secret_key=self.secret_key)
         if claims is None:
             raise AuthenticationRequiredError
@@ -95,4 +95,4 @@ class AuthService:
                 raise AuthenticationRequiredError
             if not user.is_active:
                 raise InactiveUserError
-            return UserResult.from_model(user)
+            return UserData.model_validate(user, from_attributes=True)

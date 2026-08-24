@@ -4,7 +4,7 @@
 [`full-stack-fastapi-template`](https://github.com/fastapi/full-stack-fastapi-template/tree/master/backend/app)
 的应用入口、配置、认证和测试思路，但把中小型项目最容易混乱的职责拆开了。
 实现同时遵循仓库内的 [`AGENTS.md`](AGENTS.md)，重点落实 Session 生命周期、事务 owner、
-内部 contract 和 Presenter 边界。
+typed contract 和按真实复杂度增加抽象的原则。
 
 模板已包含：
 
@@ -31,11 +31,10 @@ fastapi-demo/
 │   ├── db/                        # Session manager 和 ORM metadata
 │   ├── dependencies/              # Manager、Service、当前用户的依赖装配
 │   ├── models/                    # SQLAlchemy ORM 模型
-│   ├── presenters/                # 内部 Result 到公开 Data 的 allowlist 映射
 │   ├── repositories/              # 查询、排序、约束错误和持久化
 │   ├── schemas/                   # Request、Data 和 HTTP response 契约
 │   ├── scripts/                   # 创建超级管理员等运维脚本
-│   ├── services/                  # Command/Result、Session、事务和业务规则
+│   ├── services/                  # Session、事务、权限和业务规则
 │   ├── exception_handlers.py      # 业务错误到 HTTP 错误契约的唯一映射
 │   ├── exceptions.py              # 稳定业务异常与错误码
 │   ├── main.py                    # FastAPI 应用工厂
@@ -61,17 +60,22 @@ fastapi-demo/
 一次登录请求的调用方向是：
 
 ```text
-HTTP form -> Router -> Command -> AuthService -> short Session -> Repository -> Database
-                |                   |              |
-                |                   |              +-> 查询和 flush，不 commit
-                |                   +-> 认证、业务异常、事务 owner
-                +-> Presenter / OAuth2 标准响应
+HTTP form -> Router -> AuthService -> short Session -> Repository -> Database
+                |          |              |
+                |          |              +-> 查询和 flush，不 commit
+                |          +-> 认证、业务异常、事务 owner、typed Result
+                +-> ApiResponse / OAuth2 标准响应
 ```
 
 这个方向很重要：FastAPI dependency 只注入可复用的 session manager，不通过 `yield`
 持有业务 Session；Service 的每个公开用例创建并关闭短 Session，是唯一的 commit/rollback
-owner；Repository 不判断管理员权限，也不偷偷 commit；Presenter 只映射公开 allowlist 字段。
-应用 lifespan 拥有数据库 Engine，并在进程关闭时释放连接池。
+owner；Repository 不判断管理员权限，也不偷偷 commit。Service 在关闭
+Session 前返回安全的 typed Data/Result，Router 只负责响应组装。应用 lifespan
+拥有数据库 Engine，并在进程关闭时释放连接池。
+
+当一个用例出现多入口、不同信任级别或独立演进的输入时，可以增加 Command；
+当内部 Result 与公开 Data 需要改名、计算、聚合、角色视图或版本差异时，可以增加
+Presenter/转换函数。它们都是有用的扩展工具，但不为同名字段子集提前搭层。
 
 ## 2. 本地启动（Docker PostgreSQL）
 

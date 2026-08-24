@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 from fastapi.testclient import TestClient
 
 from app.db.session import DatabaseSessionManager
+from app.schemas.user import UserData
 from app.services.user import UserService
-from app.services.user_contracts import CreateUserCommand, UserResult
 
 
 @dataclass(frozen=True, slots=True)
 class AccountFixture:
-    user: UserResult
+    user: UserData
     password: str = field(repr=False)
 
 
@@ -27,13 +27,11 @@ class AccountFactory:
         password = secrets.token_urlsafe(24)
         email_prefix = secrets.token_hex(8)
         user = UserService(manager=self.manager).create_user(
-            CreateUserCommand(
-                email=f"{email_prefix}@example.com",
-                full_name="Test User",
-                password=password,
-                is_active=is_active,
-                is_superuser=is_superuser,
-            )
+            email=f"{email_prefix}@example.com",
+            full_name="Test User",
+            password=password,
+            is_active=is_active,
+            is_superuser=is_superuser,
         )
         return AccountFixture(user=user, password=password)
 

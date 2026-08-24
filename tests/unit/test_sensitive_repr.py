@@ -4,7 +4,6 @@ from app.repositories.user import UserPasswordChange, UserRecordCreate
 from app.schemas.auth import AccessTokenResponse
 from app.schemas.user import UserPasswordChangeRequest, UserRegisterRequest
 from app.services.auth import AccessTokenResult
-from app.services.user_contracts import ChangeCurrentUserPasswordCommand, RegisterUserCommand
 
 
 def test_sensitive_values_do_not_appear_in_contract_reprs() -> None:
@@ -31,25 +30,12 @@ def test_sensitive_values_do_not_appear_in_contract_reprs() -> None:
             )
         ),
         repr(
-            RegisterUserCommand(
-                email="repr-check@example.com",
-                full_name=None,
-                password=sensitive_value,
-            )
-        ),
-        repr(
             UserRecordCreate(
                 email="repr-check@example.com",
                 full_name=None,
                 hashed_password=sensitive_value,
                 is_active=True,
                 is_superuser=False,
-            )
-        ),
-        repr(
-            ChangeCurrentUserPasswordCommand(
-                current_password=sensitive_value,
-                new_password=sensitive_value,
             )
         ),
         repr(UserPasswordChange(hashed_password=sensitive_value)),

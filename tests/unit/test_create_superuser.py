@@ -6,7 +6,8 @@ from uuid import uuid4
 import pytest
 
 from app.scripts import create_superuser
-from app.services.user_contracts import CreateUserCommand
+
+type CreateUserCall = tuple[str, str | None, str, bool, bool]
 
 
 def test_main_creates_active_superuser(
@@ -17,15 +18,23 @@ def test_main_creates_active_superuser(
     user_id = uuid4()
     expected_manager = object()
     answers: Iterator[str] = iter(["  admin@example.com  ", "  Admin User  "])
-    captured_command: CreateUserCommand | None = None
+    captured_call: CreateUserCall | None = None
 
     class UserServiceStub:
         def __init__(self, *, manager: object) -> None:
             assert manager is expected_manager
 
-        def create_user(self, command: CreateUserCommand) -> SimpleNamespace:
-            nonlocal captured_command
-            captured_command = command
+        def create_user(
+            self,
+            *,
+            email: str,
+            full_name: str | None,
+            password: str,
+            is_active: bool,
+            is_superuser: bool,
+        ) -> SimpleNamespace:
+            nonlocal captured_call
+            captured_call = (email, full_name, password, is_active, is_superuser)
             return SimpleNamespace(id=user_id)
 
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
@@ -35,11 +44,11 @@ def test_main_creates_active_superuser(
 
     create_superuser.main()
 
-    assert captured_command == CreateUserCommand(
-        email="admin@example.com",
-        full_name="Admin User",
-        password=password,
-        is_active=True,
-        is_superuser=True,
+    assert captured_call == (
+        "admin@example.com",
+        "Admin User",
+        password,
+        True,
+        True,
     )
     assert capsys.readouterr().out == f"Created superuser: {user_id}\n"
