@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -28,6 +30,11 @@ class RsModel(CamelModel):
 
 class ApiResponse[DataT](RsModel):
     data: DataT
+
+
+class PaginationQuery(RqModel):
+    page: Annotated[int, Field(ge=1, le=10_000)] = 1
+    page_size: Annotated[int, Field(ge=1, le=100)] = 20
 
 
 class PageData[DataT](RsModel):

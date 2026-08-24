@@ -5,11 +5,10 @@ from fastapi import APIRouter, Path, Query, Response, status
 
 from app.dependencies.auth import CurrentUser
 from app.dependencies.user import UserServiceDep
-from app.schemas.common import ApiResponse, PageData
+from app.schemas.common import ApiResponse, PageData, PaginationQuery
 from app.schemas.user import (
     UserCreateRequest,
     UserData,
-    UserListQuery,
     UserPasswordChangeRequest,
     UserPutRequest,
     UserSelfPutRequest,
@@ -72,7 +71,7 @@ def create_user(
 
 @router.get("")
 def list_users(
-    query: Annotated[UserListQuery, Query()],
+    query: Annotated[PaginationQuery, Query()],
     current_user: CurrentUser,
     service: UserServiceDep,
 ) -> ApiResponse[PageData[UserData]]:

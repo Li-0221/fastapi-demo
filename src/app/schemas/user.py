@@ -54,8 +54,3 @@ class UserData(RsModel):
     is_superuser: bool
     created_at: datetime
     updated_at: datetime
-
-
-class UserListQuery(RqModel):
-    page: Annotated[int, Field(ge=1)] = 1
-    page_size: Annotated[int, Field(ge=1, le=100)] = 20

@@ -333,3 +333,18 @@ def test_user_list_empty_page_is_stable(
         "page": 2,
         "pageSize": 2,
     }
+
+
+def test_user_list_rejects_page_that_exceeds_supported_offset(
+    client: TestClient,
+    admin_account: AccountFixture,
+) -> None:
+    response = client.get(
+        "/api/v1/users",
+        params={"page": 10**100, "pageSize": 100},
+        headers=login_headers(client, admin_account),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["details"][0]["location"] == ["query", "page"]
