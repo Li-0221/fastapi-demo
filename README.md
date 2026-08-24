@@ -149,7 +149,19 @@ Swagger 和通用 OAuth2 客户端无法识别。
 }
 ```
 
-完整端点、参数和响应字段以运行时 Swagger/ReDoc 为准。
+| HTTP 状态 | 稳定错误码 |
+| --- | --- |
+| `400` | `INVALID_CURRENT_PASSWORD` |
+| `401` | `AUTHENTICATION_REQUIRED`、`INVALID_CREDENTIALS` |
+| `403` | `INACTIVE_USER`、`PERMISSION_DENIED` |
+| `404` | `USER_NOT_FOUND`、`HTTP_ERROR` |
+| `405` | `HTTP_ERROR` |
+| `409` | `EMAIL_ALREADY_EXISTS`、`SELF_ADMINISTRATION_NOT_ALLOWED` |
+| `422` | `VALIDATION_ERROR` |
+| `500` | `INTERNAL_ERROR` |
+
+端点、请求参数和成功响应字段以运行时 Swagger/ReDoc 为准。为保持 Router 声明简洁，OpenAPI
+不逐项枚举业务错误响应；错误状态、稳定错误码和统一 envelope 由本节及 API contract tests 约束。
 
 PUT 要求完整提供当前资源可编辑的字段；`fullName: null` 表示清空姓名，不可为空的字段
 （例如 `email`、`isActive`）缺失或收到 `null` 会在 request schema 边界返回 `422`。

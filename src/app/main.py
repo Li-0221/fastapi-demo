@@ -1,6 +1,5 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -17,23 +16,6 @@ from app.exception_handlers import (
 )
 from app.exceptions import AppError
 from app.middleware import RequestIdMiddleware
-from app.schemas.common import ErrorResponse
-
-# tripguru-ast: ignore[TG-DS001] - FastAPI owns the OpenAPI responses mapping protocol
-ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
-    401: {"model": ErrorResponse},
-    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
-    403: {"model": ErrorResponse},
-    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
-    404: {"model": ErrorResponse},
-    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
-    409: {"model": ErrorResponse},
-    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
-    422: {"model": ErrorResponse},
-    # tripguru-ast: ignore[TG-DS001] - FastAPI owns this response metadata mapping
-    500: {"model": ErrorResponse},
-}
 
 
 @asynccontextmanager
@@ -58,7 +40,6 @@ def create_app() -> FastAPI:
         openapi_url=f"{settings.api_v1_prefix}/openapi.json",
         docs_url="/docs",
         redoc_url="/redoc",
-        responses=ERROR_RESPONSES,
         lifespan=application_lifespan,
     )
     application.add_middleware(RequestIdMiddleware)
