@@ -9,7 +9,11 @@ def test_health_check(client: TestClient) -> None:
     response = client.get("/api/v1/health")
 
     assert response.status_code == 200
-    assert response.json() == {"data": {"status": "ok"}}
+    assert response.json() == {
+        "code": 0,
+        "data": {"status": "ok"},
+        "message": "success",
+    }
     assert response.headers["X-Request-ID"]
 
 
@@ -43,14 +47,21 @@ def test_openapi_matches_put_and_path_runtime_contract(client: TestClient) -> No
     password_schema = schema["components"]["schemas"]["UserPasswordChangeRequest"]
     assert set(password_schema["required"]) == {"currentPassword", "newPassword"}
 
+    list_parameters = schema["paths"]["/api/v1/users"]["get"]["parameters"]
+    assert [parameter["name"] for parameter in list_parameters] == ["page", "pagesize"]
+
 
 def test_method_not_allowed_keeps_protocol_header(client: TestClient) -> None:
     response = client.post("/api/v1/health")
 
     assert response.status_code == 405
     assert response.headers["Allow"] == "GET"
-    assert response.headers["X-Request-ID"] == response.json()["error"]["requestId"]
-    assert response.json()["error"]["code"] == "HTTP_ERROR"
+    assert response.headers["X-Request-ID"]
+    assert response.json() == {
+        "code": 10010,
+        "data": None,
+        "message": "Method not allowed",
+    }
 
 
 def test_unexpected_error_has_safe_contract_and_request_id() -> None:
@@ -75,6 +86,9 @@ def test_unexpected_error_has_safe_contract_and_request_id() -> None:
         app.openapi_schema = None
 
     assert response.status_code == 500
-    assert response.headers["X-Request-ID"] == response.json()["error"]["requestId"]
-    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
-    assert response.json()["error"]["message"] == "An unexpected error occurred"
+    assert response.headers["X-Request-ID"]
+    assert response.json() == {
+        "code": 10011,
+        "data": None,
+        "message": "An unexpected error occurred",
+    }

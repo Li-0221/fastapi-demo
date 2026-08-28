@@ -2,12 +2,12 @@ from typing import Literal
 
 from fastapi import APIRouter
 
-from app.schemas.common import ApiResponse, RsModel
+from app.schemas.common import ApiResponse, ResponseModel
 
 router = APIRouter(tags=["health"])
 
 
-class HealthData(RsModel):
+class HealthData(ResponseModel):
     status: Literal["ok"]
 
 

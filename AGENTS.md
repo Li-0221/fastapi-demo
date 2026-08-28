@@ -81,7 +81,7 @@ uv run alembic check
 
 - 只负责 HTTP typed binding、依赖注入、调用 Service、在必要时调用 Presenter/转换函数，以及组装 HTTP response。
 - 禁止直接访问 ORM、Session 或 Repository，禁止拥有事务、权限推导和业务状态变更。
-- 普通 JSON 成功响应在 Router 组装 `ApiResponse[T]`；OAuth2 token 与 `204 No Content` 保持协议原始形状。
+- 普通 JSON 成功响应在 Router 组装 `ApiResponse[T]`，失败响应由统一异常处理器组装 `ErrorResponse`；OAuth2 token 与 `204 No Content` 保持协议原始形状。
 
 ### Service
 
@@ -114,12 +114,13 @@ uv run alembic check
 ## API 契约
 
 - Request、ORM 和 Response Data 不得因为方便而混为一个宽型。内部 Command/Result 在 owner、trust、语义、生命周期或演进方向不同时必须拆出；语义完全一致且已排除敏感字段的 typed Data 可以由 Service 和 Router 共用。
-- 入站 request schema 继承项目的 `RqModel`，统一获得 camelCase alias 和 `extra="forbid"`；公开 response Data 继承 `RsModel`。
-- 需要独立 Command/Result 时，使用 dataclass 或独立内部模型，不继承 `RqModel`/`RsModel`，避免 wire alias、extra 和序列化策略进入业务层。
-- 普通 API wire 字段使用 camelCase；Python 内部保持 snake_case。
+- 入站 request schema 继承项目的 `RequestModel`，统一获得 camelCase alias 和 `extra="forbid"`；公开 response Data 继承 `ResponseModel`。
+- 需要独立 Command/Result 时，使用 dataclass 或独立内部模型，不继承 `RequestModel`/`ResponseModel`，避免 wire alias、extra 和序列化策略进入业务层。
+- 普通 API wire 字段使用 camelCase；分页 query 固定使用 `page`、`pagesize`，分页 response Data 固定使用 `total`、`items`、`page`、`page_size`；Python 内部保持 snake_case。
 - OAuth2 token 响应必须保留标准的 `access_token`、`token_type`、`expires_in`。
-- 普通成功响应使用 `{ "data": ... }`；错误响应使用统一的 `{ "error": ... }`；`204` 不返回 JSON body。
-- 分页响应保留 `items`、`total`、`page`、`pageSize`，Repository 查询必须有稳定排序。
+- 普通成功响应使用 `{ "code": 0, "data": ..., "message": "success" }`；错误响应使用相同的 `code`、`data`、`message` 顶层字段，失败 `code` 为非零自定义整数业务码，不得从 HTTP 状态码推导。
+- 每个应用错误定义同时拥有业务码、HTTP 状态和默认安全消息；框架 HTTP 异常保留框架状态并映射到稳定业务码。失败响应的 `data` 固定为 `null`，request ID 仅通过 `X-Request-ID` header 返回；`204` 不返回 JSON body。
+- 分页 query 使用 `page`、`pagesize`；分页响应的 `data` 保留 `total`、`items`、`page`、`page_size`，可以按具体列表场景增加额外字段，Repository 查询必须有稳定排序。
 - PATCH 必须区分未提供、显式 `null` 和具体值，使用 `model_fields_set` 或 `exclude_unset=True` 保留该语义。
 - 禁止用 `exclude_none=True` 实现 PATCH。不可为空字段收到显式 `null` 时必须在 request schema 边界拒绝。
 - 使用 Pydantic v2 API；禁止新增 `.dict()` 和未经重新验证的 `model_copy(update=...)`。

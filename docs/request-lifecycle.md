@@ -87,10 +87,10 @@ Command 不是 FastAPI 的要求，也不代表项目实现了完整 CQRS。它�
 
 ```text
 任意请求阶段发生异常
-   ├─ Pydantic / FastAPI 参数校验失败 → 422 VALIDATION_ERROR
-   ├─ 已知 AppError                   → 稳定的 4xx error code
-   ├─ 路由或 HTTP method 错误         → 404 / 405 HTTP_ERROR
-   └─ 未处理异常                      → 500 INTERNAL_ERROR
+   ├─ Pydantic / FastAPI 参数校验失败 → HTTP 422 / 业务码 10009
+   ├─ 已知 AppError                   → 错误定义拥有的 HTTP 状态与业务码
+   ├─ 路由或 HTTP method 错误         → HTTP 404 / 405，业务码 10010
+   └─ 未处理异常                      → HTTP 500 / 业务码 10011
    ↓
 Exception Handler
    ↓

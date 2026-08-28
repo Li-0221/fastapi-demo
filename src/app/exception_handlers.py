@@ -1,40 +1,26 @@
 import logging
-from typing import Annotated
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
 
-from app.exceptions import AppError
-from app.schemas.common import ErrorData, ErrorResponse, ValidationIssue
+from app.exceptions import AppError, ErrorCode
+from app.schemas.common import ErrorResponse
 
 logger = logging.getLogger(__name__)
-
-
-class FrameworkValidationError(BaseModel):
-    loc: tuple[str | int, ...]
-    msg: str
-    type: str
-    input: Annotated[object | None, Field(exclude=True)] = None
 
 
 def error_json_response(
     *,
     status_code: int,
-    code: str,
-    message: str,
+    code: ErrorCode,
     request_id: str,
-    details: list[ValidationIssue] | None = None,
+    message: str | None = None,
 ) -> JSONResponse:
     response = ErrorResponse(
-        error=ErrorData(
-            code=code,
-            message=message,
-            request_id=request_id,
-            details=tuple(details) if details is not None else (),
-        )
+        code=code.business_code,
+        message=message if message is not None else code.default_message,
     )
     # 这里才是真正交给 Starlette 的 JSON 序列化边界, 因此显式使用公开 alias。
     content = response.model_dump(mode="json", by_alias=True)
@@ -48,32 +34,21 @@ def error_json_response(
 
 async def handle_app_error(request: Request, error: AppError) -> JSONResponse:
     return error_json_response(
-        status_code=error.status_code,
+        status_code=error.code.http_status,
         code=error.code,
-        message=error.message,
         request_id=request.state.request_id,
+        message=error.code.default_message,
     )
 
 
 async def handle_request_validation(
     request: Request,
-    error: RequestValidationError,
+    _error: RequestValidationError,
 ) -> JSONResponse:
-    framework_errors = [FrameworkValidationError.model_validate(item) for item in error.errors()]
-    details = [
-        ValidationIssue(
-            location=[str(part) for part in item.loc],
-            message=item.msg,
-            error_type=item.type,
-        )
-        for item in framework_errors
-    ]
     return error_json_response(
-        status_code=422,
-        code="VALIDATION_ERROR",
-        message="Request validation failed",
+        status_code=ErrorCode.VALIDATION_ERROR.http_status,
+        code=ErrorCode.VALIDATION_ERROR,
         request_id=request.state.request_id,
-        details=details,
     )
 
 
@@ -88,7 +63,7 @@ async def handle_http_error(
         message = "Method not allowed"
     response = error_json_response(
         status_code=error.status_code,
-        code="HTTP_ERROR",
+        code=ErrorCode.HTTP_ERROR,
         message=message,
         request_id=request.state.request_id,
     )
@@ -110,8 +85,7 @@ async def handle_unexpected_error(request: Request, error: Exception) -> JSONRes
         },
     )
     return error_json_response(
-        status_code=500,
-        code="INTERNAL_ERROR",
-        message="An unexpected error occurred",
+        status_code=ErrorCode.INTERNAL_ERROR.http_status,
+        code=ErrorCode.INTERNAL_ERROR,
         request_id=request.state.request_id,
     )

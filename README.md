@@ -128,37 +128,41 @@ uv run python -m app.scripts.create_superuser
 
 ```json
 {
-  "data": {}
+  "code": 0,
+  "data": {},
+  "message": "success"
 }
 ```
 
-列表的 `data` 包含 `items`、`total`、`page`、`pageSize`。所有普通 API 字段使用
-camelCase。OAuth2 登录必须保持标准的 `access_token`、`token_type` 和 `expires_in`，否则
-Swagger 和通用 OAuth2 客户端无法识别。
+分页 query 使用 `page`、`pagesize`。分页响应的 `data` 固定包含 `total`、`items`、`page`、
+`page_size`，具体列表可以增加额外字段。除此以外，普通 API 字段使用 camelCase。OAuth2
+登录必须保持标准的 `access_token`、`token_type` 和 `expires_in`，否则 Swagger 和通用
+OAuth2 客户端无法识别。
 
 错误响应统一为：
 
 ```json
 {
-  "error": {
-    "code": "STABLE_MACHINE_CODE",
-    "message": "Safe message",
-    "requestId": "request correlation id",
-    "details": []
-  }
+  "code": 10007,
+  "data": null,
+  "message": "A user with this email already exists"
 }
 ```
 
-| HTTP 状态 | 稳定错误码 |
-| --- | --- |
-| `400` | `INVALID_CURRENT_PASSWORD` |
-| `401` | `AUTHENTICATION_REQUIRED`、`INVALID_CREDENTIALS` |
-| `403` | `INACTIVE_USER`、`PERMISSION_DENIED` |
-| `404` | `USER_NOT_FOUND`、`HTTP_ERROR` |
-| `405` | `HTTP_ERROR` |
-| `409` | `EMAIL_ALREADY_EXISTS`、`SELF_ADMINISTRATION_NOT_ALLOWED` |
-| `422` | `VALIDATION_ERROR` |
-| `500` | `INTERNAL_ERROR` |
+失败响应继续返回真实的 `4xx`/`5xx` HTTP 状态；顶层 `code` 是独立、稳定且非零的自定义
+整数业务码，不能从 HTTP 状态码推导。`data` 固定为 `null`，`message` 提供安全的展示消息，
+请求关联 ID 通过 `X-Request-ID` header 返回。
+
+| HTTP 状态 | 业务码 | 错误定义 |
+| --- | --- | --- |
+| `400` | `10003` | `INVALID_CURRENT_PASSWORD` |
+| `401` | `10001`、`10002` | `AUTHENTICATION_REQUIRED`、`INVALID_CREDENTIALS` |
+| `403` | `10004`、`10005` | `INACTIVE_USER`、`PERMISSION_DENIED` |
+| `404` | `10006`、`10010` | `USER_NOT_FOUND`、`HTTP_ERROR` |
+| `405` | `10010` | `HTTP_ERROR` |
+| `409` | `10007`、`10008` | `EMAIL_ALREADY_EXISTS`、`SELF_ADMINISTRATION_NOT_ALLOWED` |
+| `422` | `10009` | `VALIDATION_ERROR` |
+| `500` | `10011` | `INTERNAL_ERROR` |
 
 端点、请求参数和成功响应字段以运行时 Swagger/ReDoc 为准。为保持 Router 声明简洁，OpenAPI
 不逐项枚举业务错误响应；错误状态、稳定错误码和统一 envelope 由本节及 API contract tests 约束。

@@ -16,7 +16,7 @@ def test_regular_user_cannot_list_users(
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
+    assert response.json()["code"] == 10005
 
 
 @pytest.mark.parametrize("method", ["post", "get", "put", "delete"])
@@ -54,7 +54,7 @@ def test_regular_user_cannot_use_admin_user_routes(
         response = client.delete(user_path, headers=headers)
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
+    assert response.json()["code"] == 10005
 
 
 def test_admin_user_crud_and_pagination(
@@ -77,10 +77,12 @@ def test_admin_user_crud_and_pagination(
     assert create_response.status_code == 201
     user_id = create_response.json()["data"]["id"]
 
-    list_response = client.get("/api/v1/users?page=1&pageSize=1", headers=headers)
+    list_response = client.get("/api/v1/users?page=1&pagesize=1", headers=headers)
     assert list_response.status_code == 200
+    assert list_response.json()["code"] == 0
+    assert list_response.json()["message"] == "success"
     assert list_response.json()["data"]["total"] == 2
-    assert list_response.json()["data"]["pageSize"] == 1
+    assert list_response.json()["data"]["page_size"] == 1
     assert len(list_response.json()["data"]["items"]) == 1
 
     get_response = client.get(f"/api/v1/users/{user_id}", headers=headers)
@@ -130,8 +132,8 @@ def test_put_rejects_null_for_non_nullable_field(
     )
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert response.json()["error"]["details"][0]["location"] == ["body", "email"]
+    assert response.json()["code"] == 10009
+    assert response.json()["data"] is None
 
 
 def test_self_update_rejects_admin_fields(
@@ -188,7 +190,7 @@ def test_current_user_cannot_delete_own_account(
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
+    assert response.json()["code"] == 10005
     assert client.get("/api/v1/users/me", headers=headers).status_code == 200
 
 
@@ -224,7 +226,7 @@ def test_profile_update_cannot_bypass_password_change_contract(
     )
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["code"] == 10009
 
 
 def test_current_user_can_change_password(
@@ -270,7 +272,7 @@ def test_password_change_rejects_incorrect_current_password(
     )
 
     assert response.status_code == 400
-    assert response.json()["error"]["code"] == "INVALID_CURRENT_PASSWORD"
+    assert response.json()["code"] == 10003
     original_login = client.post(
         "/api/v1/auth/login/access-token",
         data={"username": user_account.user.email, "password": user_account.password},
@@ -289,7 +291,7 @@ def test_password_change_requires_authentication(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
-    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert response.json()["code"] == 10001
 
 
 def test_disabled_user_token_stops_working(
@@ -312,7 +314,7 @@ def test_disabled_user_token_stops_working(
     assert response.status_code == 200
     rejected = client.get("/api/v1/users/me", headers=user_headers)
     assert rejected.status_code == 403
-    assert rejected.json()["error"]["code"] == "INACTIVE_USER"
+    assert rejected.json()["code"] == 10004
 
 
 def test_user_list_empty_page_is_stable(
@@ -322,17 +324,31 @@ def test_user_list_empty_page_is_stable(
 ) -> None:
     account_factory.create()
     response = client.get(
-        "/api/v1/users?page=2&pageSize=2",
+        "/api/v1/users?page=2&pagesize=2",
         headers=login_headers(client, admin_account),
     )
 
     assert response.status_code == 200
     assert response.json()["data"] == {
-        "items": [],
         "total": 2,
+        "items": [],
         "page": 2,
-        "pageSize": 2,
+        "page_size": 2,
     }
+
+
+def test_user_list_rejects_legacy_page_size_query_name(
+    client: TestClient,
+    admin_account: AccountFixture,
+) -> None:
+    response = client.get(
+        "/api/v1/users?page=1&pageSize=1",
+        headers=login_headers(client, admin_account),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == 10009
+    assert response.json()["data"] is None
 
 
 def test_user_list_rejects_page_that_exceeds_supported_offset(
@@ -341,10 +357,10 @@ def test_user_list_rejects_page_that_exceeds_supported_offset(
 ) -> None:
     response = client.get(
         "/api/v1/users",
-        params={"page": 10**100, "pageSize": 100},
+        params={"page": 10**100, "pagesize": 100},
         headers=login_headers(client, admin_account),
     )
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-    assert response.json()["error"]["details"][0]["location"] == ["query", "page"]
+    assert response.json()["code"] == 10009
+    assert response.json()["data"] is None

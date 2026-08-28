@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import EmailStr, Field
 
-from app.schemas.common import RqModel, RsModel
+from app.schemas.common import RequestModel, ResponseModel
 
 EmailField = Annotated[EmailStr, Field(max_length=255)]
 NameField = Annotated[str | None, Field(max_length=255)]
@@ -14,13 +14,13 @@ SensitivePasswordField = Annotated[PasswordField, Field(repr=False)]
 OptionalPasswordField = Annotated[PasswordField | None, Field(repr=False)]
 
 
-class UserRegisterRequest(RqModel):
+class UserRegisterRequest(RequestModel):
     email: EmailField
     full_name: NameField = None
     password: SensitivePasswordField
 
 
-class UserCreateRequest(RqModel):
+class UserCreateRequest(RequestModel):
     email: EmailField
     full_name: NameField = None
     password: SensitivePasswordField
@@ -28,7 +28,7 @@ class UserCreateRequest(RqModel):
     is_superuser: bool = False
 
 
-class UserPutRequest(RqModel):
+class UserPutRequest(RequestModel):
     email: EmailField
     full_name: NameField
     password: OptionalPasswordField = None
@@ -36,17 +36,17 @@ class UserPutRequest(RqModel):
     is_superuser: bool
 
 
-class UserSelfPutRequest(RqModel):
+class UserSelfPutRequest(RequestModel):
     email: EmailField
     full_name: NameField
 
 
-class UserPasswordChangeRequest(RqModel):
+class UserPasswordChangeRequest(RequestModel):
     current_password: SensitivePasswordField
     new_password: SensitivePasswordField
 
 
-class UserData(RsModel):
+class UserData(ResponseModel):
     id: UUID
     email: EmailStr
     full_name: str | None

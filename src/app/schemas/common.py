@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -13,7 +13,7 @@ class CamelModel(BaseModel):
     )
 
 
-class RqModel(CamelModel):
+class RequestModel(CamelModel):
     # HTTP 入站只接受 alias(camelCase), 不把 Python 字段名当作备用 wire contract。
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -24,42 +24,33 @@ class RqModel(CamelModel):
     )
 
 
-class RsModel(CamelModel):
+class ResponseModel(CamelModel):
     pass
 
 
-class ApiResponse[DataT](RsModel):
+class ApiResponse[DataT](ResponseModel):
+    code: Literal[0] = 0
     data: DataT
+    message: Literal["success"] = "success"
 
 
-class PaginationQuery(RqModel):
+class PaginationQuery(RequestModel):
     page: Annotated[int, Field(ge=1, le=10_000)] = 1
-    page_size: Annotated[int, Field(ge=1, le=100)] = 20
+    page_size: Annotated[int, Field(alias="pagesize", ge=1, le=100)] = 20
 
 
-class PageData[DataT](RsModel):
-    items: list[DataT]
+class PageData[DataT](ResponseModel):
     total: int
+    items: list[DataT]
     page: int
-    page_size: int
+    page_size: Annotated[int, Field(serialization_alias="page_size")]
 
 
-class MessageData(RsModel):
+class MessageData(ResponseModel):
     message: str
 
 
-class ValidationIssue(RsModel):
-    location: list[str]
+class ErrorResponse(ResponseModel):
+    code: Annotated[int, Field(gt=0)]
+    data: None = None
     message: str
-    error_type: str
-
-
-class ErrorData(RsModel):
-    code: str
-    message: str
-    request_id: str
-    details: tuple[ValidationIssue, ...]
-
-
-class ErrorResponse(RsModel):
-    error: ErrorData

@@ -17,6 +17,8 @@ def test_register_login_and_read_current_user(client: TestClient) -> None:
     )
 
     assert register_response.status_code == 201
+    assert register_response.json()["code"] == 0
+    assert register_response.json()["message"] == "success"
     user_data = register_response.json()["data"]
     assert set(user_data) == {
         "id",
@@ -55,8 +57,11 @@ def test_duplicate_registration_has_stable_conflict_error(client: TestClient) ->
     response = client.post("/api/v1/auth/register", json=payload)
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "EMAIL_ALREADY_EXISTS"
-    assert response.json()["error"]["requestId"]
+    assert response.json() == {
+        "code": 10007,
+        "data": None,
+        "message": "A user with this email already exists",
+    }
 
 
 def test_invalid_credentials_return_401_and_bearer_challenge(
@@ -72,7 +77,8 @@ def test_invalid_credentials_return_401_and_bearer_challenge(
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
-    assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
+    assert response.json()["code"] == 10002
+    assert response.json()["data"] is None
 
 
 def test_login_rejects_oversized_credentials(client: TestClient) -> None:
@@ -82,7 +88,7 @@ def test_login_rejects_oversized_credentials(client: TestClient) -> None:
     )
 
     assert response.status_code == 401
-    assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
+    assert response.json()["code"] == 10002
 
 
 def test_inactive_user_cannot_log_in(
@@ -97,15 +103,16 @@ def test_inactive_user_cannot_log_in(
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "INACTIVE_USER"
+    assert response.json()["code"] == 10004
 
 
 def test_missing_token_uses_unified_error_contract(client: TestClient) -> None:
     response = client.get("/api/v1/users/me")
 
     assert response.status_code == 401
-    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
-    assert response.headers["X-Request-ID"] == response.json()["error"]["requestId"]
+    assert response.json()["code"] == 10001
+    assert response.json()["data"] is None
+    assert response.headers["X-Request-ID"]
 
 
 def test_malformed_token_uses_bearer_challenge(client: TestClient) -> None:
@@ -116,7 +123,7 @@ def test_malformed_token_uses_bearer_challenge(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
-    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert response.json()["code"] == 10001
 
 
 def test_request_body_rejects_python_field_names(client: TestClient) -> None:
@@ -130,4 +137,5 @@ def test_request_body_rejects_python_field_names(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["code"] == 10009
+    assert response.json()["data"] is None
