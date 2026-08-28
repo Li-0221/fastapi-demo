@@ -97,7 +97,7 @@ uv run alembic check
 
 - 只负责查询、稳定排序、约束相关持久化和 `flush()`，不负责 HTTP、角色授权或完整业务结论。
 - 查询 miss 返回 typed `None`，由 Service 转换为稳定 NotFound。
-- 写入参数使用 Repository 拥有的 typed dataclass/schema，禁止把 request 的裸 `dict` 直接 mass assignment 到 ORM。
+- 多字段或拥有独立语义的写入参数使用 Repository-owned typed dataclass/schema；单个明确标量可以使用关键字参数。禁止把 request 的裸 `dict` 直接 mass assignment 到 ORM。
 - `flush()` 只用于在当前事务内取得数据库生成值、触发约束或让后续 SQL 看见写入；它不等于持久提交。
 - Repository 返回 ORM、typed read model、`list[T]` 或 `(items, total)`，不得让 SQLAlchemy `Row`、裸 tuple 或裸 dict 泄漏到业务层。
 

@@ -11,7 +11,6 @@ from app.exceptions import (
 )
 from app.repositories.user import (
     DuplicateUserRecordError,
-    UserPasswordChange,
     UserRecordCreate,
     UserRecordReplacement,
     UserRepository,
@@ -159,7 +158,7 @@ class UserService:
                 raise InvalidCurrentPasswordError
             repository.change_password(
                 user=user,
-                data=UserPasswordChange(hashed_password=hash_password(new_password)),
+                hashed_password=hash_password(new_password),
             )
             session.commit()
 

@@ -46,10 +46,6 @@ class PageData[DataT](ResponseModel):
     page_size: Annotated[int, Field(serialization_alias="page_size")]
 
 
-class MessageData(ResponseModel):
-    message: str
-
-
 class ErrorResponse(ResponseModel):
     code: Annotated[int, Field(gt=0)]
     data: None = None

@@ -41,11 +41,6 @@ class UserRecordReplacement:
     is_superuser: bool
 
 
-@dataclass(frozen=True, slots=True)
-class UserPasswordChange:
-    hashed_password: str = field(repr=False)
-
-
 class UserRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -101,8 +96,8 @@ class UserRepository:
             raise
         return user
 
-    def change_password(self, *, user: User, data: UserPasswordChange) -> None:
-        user.hashed_password = data.hashed_password
+    def change_password(self, *, user: User, hashed_password: str) -> None:
+        user.hashed_password = hashed_password
         self.session.flush()
 
     def delete(self, user: User) -> None:

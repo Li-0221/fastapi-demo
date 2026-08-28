@@ -1,6 +1,6 @@
 import secrets
 
-from app.repositories.user import UserPasswordChange, UserRecordCreate
+from app.repositories.user import UserRecordCreate
 from app.schemas.auth import AccessTokenResponse
 from app.schemas.user import UserPasswordChangeRequest, UserRegisterRequest
 from app.services.auth import AccessTokenResult
@@ -38,7 +38,6 @@ def test_sensitive_values_do_not_appear_in_contract_reprs() -> None:
                 is_superuser=False,
             )
         ),
-        repr(UserPasswordChange(hashed_password=sensitive_value)),
         repr(AccessTokenResult(access_token=sensitive_value, expires_in=1800)),
     )
 
