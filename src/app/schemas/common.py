@@ -36,14 +36,14 @@ class ApiResponse[DataT](ResponseModel):
 
 class PaginationQuery(RequestModel):
     page: Annotated[int, Field(ge=1, le=10_000)] = 1
-    page_size: Annotated[int, Field(alias="pagesize", ge=1, le=100)] = 20
+    page_size: Annotated[int, Field(ge=1, le=100)] = 20
 
 
 class PageData[DataT](ResponseModel):
     total: int
     items: list[DataT]
     page: int
-    page_size: Annotated[int, Field(serialization_alias="page_size")]
+    page_size: int
 
 
 class ErrorResponse(ResponseModel):

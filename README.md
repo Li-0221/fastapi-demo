@@ -134,8 +134,8 @@ uv run python -m app.scripts.create_superuser
 }
 ```
 
-分页 query 使用 `page`、`pagesize`。分页响应的 `data` 固定包含 `total`、`items`、`page`、
-`page_size`，具体列表可以增加额外字段。除此以外，普通 API 字段使用 camelCase。OAuth2
+分页 query 使用 `page`、`pageSize`。分页响应的 `data` 固定包含 `total`、`items`、`page`、
+`pageSize`，具体列表可以增加额外字段。普通 API 字段统一使用 camelCase。OAuth2
 登录必须保持标准的 `access_token`、`token_type` 和 `expires_in`，否则 Swagger 和通用
 OAuth2 客户端无法识别。
 

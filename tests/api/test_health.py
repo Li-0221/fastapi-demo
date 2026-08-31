@@ -48,7 +48,7 @@ def test_openapi_matches_put_and_path_runtime_contract(client: TestClient) -> No
     assert set(password_schema["required"]) == {"currentPassword", "newPassword"}
 
     list_parameters = schema["paths"]["/api/v1/users"]["get"]["parameters"]
-    assert [parameter["name"] for parameter in list_parameters] == ["page", "pagesize"]
+    assert [parameter["name"] for parameter in list_parameters] == ["page", "pageSize"]
 
 
 def test_method_not_allowed_keeps_protocol_header(client: TestClient) -> None:

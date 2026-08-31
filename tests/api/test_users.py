@@ -77,12 +77,12 @@ def test_admin_user_crud_and_pagination(
     assert create_response.status_code == 201
     user_id = create_response.json()["data"]["id"]
 
-    list_response = client.get("/api/v1/users?page=1&pagesize=1", headers=headers)
+    list_response = client.get("/api/v1/users?page=1&pageSize=1", headers=headers)
     assert list_response.status_code == 200
     assert list_response.json()["code"] == 0
     assert list_response.json()["message"] == "success"
     assert list_response.json()["data"]["total"] == 2
-    assert list_response.json()["data"]["page_size"] == 1
+    assert list_response.json()["data"]["pageSize"] == 1
     assert len(list_response.json()["data"]["items"]) == 1
 
     get_response = client.get(f"/api/v1/users/{user_id}", headers=headers)
@@ -324,7 +324,7 @@ def test_user_list_empty_page_is_stable(
 ) -> None:
     account_factory.create()
     response = client.get(
-        "/api/v1/users?page=2&pagesize=2",
+        "/api/v1/users?page=2&pageSize=2",
         headers=login_headers(client, admin_account),
     )
 
@@ -333,16 +333,16 @@ def test_user_list_empty_page_is_stable(
         "total": 2,
         "items": [],
         "page": 2,
-        "page_size": 2,
+        "pageSize": 2,
     }
 
 
-def test_user_list_rejects_legacy_page_size_query_name(
+def test_user_list_rejects_legacy_pagesize_query_name(
     client: TestClient,
     admin_account: AccountFixture,
 ) -> None:
     response = client.get(
-        "/api/v1/users?page=1&pageSize=1",
+        "/api/v1/users?page=1&pagesize=1",
         headers=login_headers(client, admin_account),
     )
 
@@ -357,7 +357,7 @@ def test_user_list_rejects_page_that_exceeds_supported_offset(
 ) -> None:
     response = client.get(
         "/api/v1/users",
-        params={"page": 10**100, "pagesize": 100},
+        params={"page": 10**100, "pageSize": 100},
         headers=login_headers(client, admin_account),
     )
 
