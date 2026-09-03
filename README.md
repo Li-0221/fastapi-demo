@@ -70,6 +70,8 @@ fastapi-demo/
 核心调用方向是 `Router -> Service -> Repository -> PostgreSQL`。Service 拥有短 Session、
 事务和业务授权，Repository 只负责持久化。完整请求链路及 Command/Presenter 的启用条件见
 [`docs/request-lifecycle.md`](docs/request-lifecycle.md) 和 [`AGENTS.md`](AGENTS.md)。
+事务、Session、PATCH 三态和 Pydantic Optional 的复习笔记见
+[`docs/FastAPI 当前最需要复习的 5 个知识点.md`](docs/FastAPI%20当前最需要复习的%205%20个知识点.md)。
 
 ## 2. 本地启动（Docker PostgreSQL）
 
